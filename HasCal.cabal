@@ -1,0 +1,25 @@
+cabal-version:      3.0
+name:               HasCal
+version:            1.0.0
+synopsis:           Haskell embedding of PlusCal
+bug-reports:        https://github.com/Gabriel439/HasCal/issues
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Gabriella Gonzalez
+maintainer:         Gabriel439@gmail.com
+copyright:          2021 Gabriella Gonzalez
+
+library
+    exposed-modules:  HasCal
+    build-depends:    base ^>=4.14.3.0
+                    , exceptions
+                    , hashable
+                    , list-transformer
+                    , microlens-platform
+                    , mtl
+                    , prettyprinter
+                    , safe-exceptions
+                    , transformers
+                    , unordered-containers
+    hs-source-dirs:   src
+    default-language: Haskell2010
