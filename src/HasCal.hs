@@ -41,10 +41,15 @@ module HasCal
     , print
 
     -- * TLA+ expressions
+    , forall_
+    , exists_
+    , (==>)
+    , (<=>)
     , boolean
     , (~>)
     , domain
     , range
+    , choose
 
     -- * Classes
     , ToDocs(..)
@@ -83,6 +88,7 @@ import qualified Control.Monad.State.Strict as State
 import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
+import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Void as Void
 import qualified List.Transformer as List
@@ -506,6 +512,36 @@ assert False = do
 print :: Show a => a -> Process global local label ()
 print a = liftIO (Prelude.print a)
 
+{-| Verify that all elements satisfy the given predicate, like @\A@ in TLA+
+
+    `forall_` is like `all` but with the arguments `flip`ped.
+-}
+forall_ :: Foldable list => list a -> (a -> Bool) -> Bool
+forall_ = flip all
+
+{-| Verify that any element satisfies the given predicate, like @\E@ in TLA+
+
+    `forall_` is  like `any` but with the arguments `flip`ped
+-}
+exists_ :: Foldable list => list a -> (a -> Bool) -> Bool
+exists_ = flip any
+
+{-| Logical implication, like @=>@ in TLA+
+
+    @p `==>` q@ is the same as \"if @p@ then @q@\"
+-}
+(==>) :: Bool -> Bool -> Bool
+p ==> q = not p || q
+
+{-| Bidirectional logical implication, like @<=>@ in TLA+
+
+    @p `<=>` q@ is the same as \"if and only if @p@ then @q@\"
+-}
+(<=>) :: Bool -> Bool -> Bool
+p <=> q = (p ==> q) && (q ==> p)
+
+infixr 1 ==>, <=>
+
 -- | All possible boolean values, like the @BOOLEAN@ set in TLA+
 boolean :: NonEmpty Bool
 boolean = False :| [ True ]
@@ -519,15 +555,28 @@ keys ~> values =
   where
     process key = fmap ((,) key) values
 
--- | The domain of a function set, like the @DOMAIN@ function in TLA+
+{-| The domain of a function set, like the @DOMAIN@ function in TLA+
+
+    `domain` is a synonym for `HashMap.keys`.
+-}
 domain :: HashMap key value -> [key]
 domain = HashMap.keys
 
 {-| The range of a function set, like the @RANGE@ function that projects
     commonly define
+
+    `range` is a synonym for `HashMap.elems`.
 -}
 range :: HashMap key value -> [value]
 range = HashMap.elems
+
+{-| Find the first matching element, like the @CHOOSE@ function in TLA+ except
+    that this will return a `Nothing` instead of throwing an exception
+
+    `choose` is like `List.find`, but with the arguments `flip`ped.
+-}
+choose :: Foldable list =>  list a -> (a -> Bool) -> Maybe a
+choose = flip List.find
 
 {-| The `ModelException` type represents all of the ways in which the model
     checker can fail
