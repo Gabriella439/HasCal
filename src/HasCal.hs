@@ -80,6 +80,7 @@ module HasCal
     , Pretty(..)
     , Pretty.unsafeViaShow
     , Monad.when
+    , fromList
     ) where
 
 import Control.Applicative (Alternative(..), liftA2)
@@ -94,6 +95,7 @@ import Data.Int (Int8, Int16, Int32, Int64)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
+import GHC.Exts (fromList)
 import GHC.Generics (Generic)
 import Lens.Micro.Platform
 import List.Transformer (ListT)

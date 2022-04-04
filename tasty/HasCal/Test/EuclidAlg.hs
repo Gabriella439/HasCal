@@ -48,7 +48,7 @@ euclidAlg n = do
             end
 
     check Begin{..} do
-        _v <- 1 :| [ 2 .. n ]
+        _v <- fromList [ 1 .. n ]
         let _u = initialU
         return State{..}
 
