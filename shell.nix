@@ -6,7 +6,8 @@ let
 
   f = { mkDerivation, base, exceptions, hashable, lib
       , list-transformer, microlens-platform, mtl, prettyprinter
-      , safe-exceptions, transformers, unordered-containers
+      , safe-exceptions, tasty, tasty-discover, tasty-expected-failure
+      , tasty-hunit, transformers, unordered-containers
       }:
       mkDerivation {
         pname = "HasCal";
@@ -16,6 +17,10 @@ let
           base exceptions hashable list-transformer microlens-platform mtl
           prettyprinter safe-exceptions transformers unordered-containers
         ];
+        testHaskellDepends = [
+          base tasty tasty-discover tasty-expected-failure tasty-hunit
+        ];
+        testToolDepends = [ tasty-discover ];
         description = "Haskell embedding of PlusCal";
         license = lib.licenses.bsd3;
       };
