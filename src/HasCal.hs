@@ -20,6 +20,7 @@ module HasCal
       Process
     , Coroutine(..)
     , Status(..)
+    , ModelException(..)
 
     -- * Model checking
     , check
@@ -539,10 +540,10 @@ data ModelException =
           , Pretty status
           )
       =>  Nontermination { history :: [(label, status)] }
-          -- The process does not necessarily terminate because at least one
-          -- branch of execution permits an infinite cycle
+          -- ^ The process does not necessarily terminate because at least one
+          --   branch of execution permits an infinite cycle
           --
-          -- ^ NOTE: The `history` field stores old states in reverse
+          --   NOTE: The `history` field stores old states in reverse
           --   chronological order, for efficiency
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { status :: local }
