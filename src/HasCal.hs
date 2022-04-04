@@ -15,6 +15,19 @@
 
 {-# OPTIONS_GHC -Wall -Wno-orphans #-}
 
+{-| This documentation assumes that you are already familiar with PlusCal and
+    TLA+.  If not, then you will probably want to read at least one of the
+    following resources first:
+
+    * <https://learntla.com/introduction/ Learn TLA+>
+    * <https://lamport.azurewebsites.net/tla/p-manual.pdf A PlusCal User's Manual>
+
+    This package implements PlusCal as an embedded domain-specific language
+    (i.e. eDSL) in Haskell.  In other words, this does not compile to any
+    intermediate or external language; the whole thing is implemented in pure
+    Haskell.
+-}
+
 module HasCal
     ( -- * Types
       Process
