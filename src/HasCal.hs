@@ -24,6 +24,7 @@ module HasCal
 
     -- * Model checking
     , check
+    , debug
 
     -- * Lenses
     , global
@@ -676,19 +677,13 @@ check
        , Show global
        , Show label
        )
-    => NonEmpty global
-    -- ^ Starting global state
-    -> Coroutine global label
+    => Coroutine global label
     -- ^ `Coroutine` to check
+    -> NonEmpty global
+    -- ^ Starting global state
     -> IO ()
-check startingGlobals Begin{ startingLabel, startingLocal, process } = do
-    result <- Exception.try (List.runListT (State.evalStateT action startingStatus))
-
-    case result of
-        Left  exception ->
-            Pretty.Text.putDoc (pretty (exception :: ModelException))
-        Right () ->
-            mempty
+check Begin{ startingLabel, startingLocal, process } startingGlobals = do
+    List.runListT (State.evalStateT action startingStatus)
   where
     action = loop [] startingSet do
         startingGlobal <- with (Foldable.toList startingGlobals)
@@ -730,6 +725,33 @@ check startingGlobals Begin{ startingLabel, startingLocal, process } = do
                         let newSeen = HashSet.insert key seen
 
                         loop newHistory newSeen rest
+
+{-| `debug` is like `check` except that it will catch and pretty-print
+     `ModelException`s
+-}
+debug
+    :: ( Eq global
+       , Eq label
+       , Hashable global
+       , Hashable label
+       , Pretty label
+       , Pretty global
+       , Show global
+       , Show label
+       )
+    => Coroutine global label
+    -- ^ `Coroutine` to check
+    -> NonEmpty global
+    -- ^ Starting global state
+    -> IO ()
+debug coroutine startingGlobals = do
+    result <- Exception.try (check coroutine startingGlobals)
+
+    case result of
+        Left  exception ->
+            Pretty.Text.putDoc (pretty (exception :: ModelException))
+        Right () ->
+            mempty
 
 {-| Class used for pretty-printing the local state
 
