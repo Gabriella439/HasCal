@@ -16,8 +16,8 @@
 {-# OPTIONS_GHC -Wall -Wno-orphans #-}
 
 module HasCal
-    ( Process(..)
-    , Step(..)
+    ( -- * Types
+      Process
     , Coroutine(..)
     , Status(..)
 
@@ -28,21 +28,22 @@ module HasCal
     , global
     , local
 
-    -- * Utilities
+    -- * PlusCal Statements
     , yield
     , skip
     , end
-    , branch
+    , either
     , with
     , while
     , await
     , assert
-    , debug
+    , print
 
-    -- * Ranges
+    -- * TLA+ expressions
     , boolean
     , (~>)
     , domain
+    , range
 
     -- * Classes
     , ToDocs(..)
@@ -71,6 +72,7 @@ import GHC.Generics (Generic)
 import Lens.Micro.Platform
 import List.Transformer (ListT)
 import Numeric.Natural (Natural)
+import Prelude hiding (either, print)
 import Prettyprinter (Doc, Pretty(..))
 
 import qualified Control.Applicative as Applicative
@@ -83,6 +85,7 @@ import qualified Data.HashSet as HashSet
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Void as Void
 import qualified List.Transformer as List
+import qualified Prelude
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.String as Pretty.String
 import qualified Prettyprinter.Render.Text as Pretty.Text
@@ -96,59 +99,112 @@ import qualified Text.Show as Show
 instance MonadThrow m => MonadThrow (ListT m) where
     throwM e = lift (throwM e)
 
-newtype Process label m result = Choice (m (Step label m result))
+{-| A `Process` represents a sequence of @PlusCal@ statements.  You can think of
+    a `Process` as a non-deterministic finite automaton:
+
+    * The `Process` transitions atomically between labeled states
+    * The `Process` may explore multiple state transitions in parallel because
+      is it non-deterministic
+
+    The only caveat is that a `Process` does not include a starting state (which
+    is only later specified upon conversion to a `Coroutine`).
+
+    The type variables are:
+
+    * @global@: The type of the global state shared by every `Process`
+    * @local@: The type of the process-local state unique to this `Process`
+    * @label@: The type of labels that this `Process` emits
+    * @result@: The return value of the `Process`
+
+    Processes support the following core functionality:
+
+    * `yield` - Yield control alongside a label for the current state, ending
+      an atomic transition
+    * `pure` / `return` - Promote a value to a `Process` which does nothing
+      and returns the value
+    * `empty` - Terminate a `Process`
+    * `liftIO` - Run an arbitrary `IO` action inside a `Process`
+    * `throwM` - Throw an exception inside a `Process`, causing model checking
+       to fail
+    * `get` / `put` - Get and set the current `Process` state
+    * `mempty` - A `Process` which does nothing
+
+    Additionally, the utilities in the \"PlusCal utilities\" section wrap the
+    above functionality to use more PlusCal-friendly names.
+
+    You can combine one or more `Process`es using:
+
+    * @do@ notation - Run `Process`es sequentially
+    * (`<|>`) - Explore two `Process`es in parallel
+    * (`<>`) - Run two `Process`es sequentially and combine their return values
+
+    Finally, you will need to convert a `Process` into a `Coroutine` by wrapping
+    the `Process` in the `Begin` constructor.  Note that the process needs to
+    terminate (e.g. using `empty` / `end`) in order to become a `Coroutine`.
+-}
+newtype Process global local label result
+    = Choice
+        { possibilities
+            :: StateT (Status global local) (ListT IO)
+                (Step global local label result)
+        }
     deriving stock (Functor)
 
-instance Monad m => Applicative (Process label m) where
-    pure result = lift (pure result)
+instance Applicative (Process global local label) where
+    pure result = Choice (pure (Done result))
 
     (<*>) = Monad.ap
 
-instance Monad m => Monad (Process label m) where
+instance Monad (Process global local label) where
     Choice ps >>= f = Choice do
         p <- ps
         case p of
             Yield label rest -> do
                 return (Yield label (rest >>= f))
-            Done result -> do
-                let Choice possibilities = f result
-                possibilities
+            Done result -> possibilities (f result)
 
-instance (Monad m, Alternative m) => Alternative (Process label m) where
+instance Alternative (Process global local label) where
     empty = Choice empty
 
     Choice psL <|> Choice psR = Choice (psL <|> psR)
 
-instance (Monad m, Semigroup result) => Semigroup (Process label m result) where
+instance Semigroup result => Semigroup (Process global local label result) where
     (<>) = liftA2 (<>)
 
-instance (Monad m, Monoid result) => Monoid (Process label m result) where
+instance Monoid result => Monoid (Process global local label result) where
     mempty = pure mempty
 
-instance MonadTrans (Process label) where
-    lift m = Choice (fmap Done m)
+instance MonadState (Status global local) (Process global local label) where
+    get = Choice (fmap Done get)
 
-instance MonadState s m => MonadState s (Process label m) where
-    get = lift get
+    put s = Choice (fmap Done (put s))
 
-    put s = lift (put s)
+    state k = Choice (fmap Done (state k))
 
-    state k = lift (state k)
+instance MonadThrow (Process global local label) where
+    throwM e = Choice (fmap Done (throwM e))
 
-instance MonadThrow m => MonadThrow (Process label m) where
-    throwM e = lift (throwM e)
+instance MonadIO (Process global local label) where
+    liftIO io = Choice (fmap Done (liftIO io))
 
-instance MonadIO m => MonadIO (Process label m) where
-    liftIO io = lift (liftIO io)
-
-data Step label m result
-    = Yield label (Process label m result)
+data Step global local label result
+    = Yield label (Process global local label result)
     | Done result
     deriving stock (Functor)
 
-data Status global local = Status { _global :: global, _local :: local }
-    deriving stock (Eq, Generic, Show)
-    deriving anyclass (Hashable)
+{-| The `Status` type represents the state for every `Process`, which has two
+    components:
+
+    * @global@ - The global state shared by all `Process`es
+    * @local@ - The local state unique to this `Process`
+-}
+data Status global local = Status
+    { _global :: global
+      -- ^ Shared global state
+    , _local :: local
+      -- ^ `Process`-local state
+    } deriving stock (Eq, Generic, Show)
+      deriving anyclass (Hashable)
 
 instance (Pretty global, ToDocs local) => Pretty (Status global local) where
     pretty Status{ _global, _local } = Pretty.group (Pretty.flatAlt long short)
@@ -180,24 +236,53 @@ instance (Pretty global, ToDocs local) => Pretty (Status global local) where
 
         localDocs = toDocs _local
 
+-- | `Lens'` for accessing the @global@ state of a `Process`
 global :: Lens' (Status global local) global
 global k (Status g l) = fmap (\g' -> Status g' l) (k g)
 
+-- | `Lens'` for accessing the @local@ state of a `Process`
 local :: Lens' (Status global local) local
 local k (Status g l) = fmap (\l' -> Status g l') (k l)
 
+{-| A `Coroutine` wraps a `Process` alongside a starting label and starting
+    process-local state.  Including the starting state makes a `Coroutine` a
+    complete non-deterministic finite automaton that can be combined with
+    other `Coroutine`s using `Applicative` operations.  Combining `Coroutine`s
+    in this way is the same as taking the Cartesian product of their
+    equivalent non-deterministic finite automata.  For a more detailed
+    explanation, see:
+
+    * <https://www.haskellforall.com/2022/03/modeling-pluscal-in-haskell-using.html Modeling PlusCal in Haskell using Cartesian products of NFAs>
+
+    The type variables are:
+
+    * @global@: The type of the global state shared by every `Coroutine`
+    * @label@: The type of labels that this `Coroutine` emits
+
+    Carefully note that the `Process`-local state (i.e. the @local@ variable)
+    is hidden upon conversion to a `Coroutine`, in order to ensure that the
+    `Process`-local state of each `Coroutine` is isolated from one another.
+
+    You can create a `Coroutine` in the following ways:
+
+    * The `Begin` constructor - Wrap a `Process` with a starting state and label
+      to create a `Coroutine`
+    * `pure` - A `Coroutine` with a single state and no valid transitions
+    * `mempty` - A `Coroutine` that does nothing
+
+    You can combine `Coroutine`s using:
+
+    * `Functor` and `Applicative` utilities (e.g. (`<$>`) and (`<*>`))
+    * @do@ notation, if you enable @ApplicativeDo@
+    * (`<>`) - Run two `Coroutine`s in parallel and combine their results
+-}
 data Coroutine global label =
         forall local
     .   (Eq local, Hashable local, ToDocs local, Show local)
     =>  Begin
             { startingLabel :: label
             , startingLocal :: local
-            , process
-                :: Process label
-                       (StateT (Status global local)
-                           (ListT IO)
-                       )
-                       Void
+            , process       :: Process global local label Void
             }
 
 instance Functor (Coroutine global) where
@@ -242,53 +327,189 @@ instance Semigroup label => Semigroup (Coroutine global label) where
 instance Monoid label => Monoid (Coroutine global label) where
     mempty = pure mempty
 
-yield :: Monad m => label -> Process label m ()
+{-| End the current atomic transition alongside a label for the current state.
+    If the exact same label and state have been reached before then the
+    model checker will fail with a `NonTermination` error
+
+    This potentially yields control to other `Process`es
+-}
+yield :: label -> Process global local label ()
 yield label = Choice (pure (Yield label mempty))
 
-skip :: Monad m => Process label m ()
+{-| A `Process` which does nothing, like the @skip@ statement in PlusCal
+
+    This is a synonym for `mempty`, but with a `Process`-specific type
+    signature.
+
+    Note that you do not need to use `skip` in Haskell as often as in PlusCal.
+    For example, consider the following PlusCal code:
+
+    > A:
+    >   skip;
+    > B:
+    >   either
+    >     skip;
+    >   or
+    >     C:
+    >       skip;
+    >   end either;
+
+    The Haskell code can elide many of those `skip`s:
+
+@
+example = do
+    `yield` "A"
+    `yield` "B"
+    `either`
+        [ `skip`
+        , `yield` "C"
+        ]
+@
+
+    … because `skip` literally does nothing and therefore can be omitted in
+    most cases.
+-}
+skip :: Process global local label ()
 skip = mempty
 
-end :: (Monad m, Alternative m) => Process label m a
+{-| Terminate the current `Process`, which slightly resembles the @end process@
+    keyword in PlusCal
+
+    This is a synonym for `empty`, but with a `Process`-specific type signature.
+
+    Note that this does not behave exactly the same as @end process@ in PlusCal.
+    This is closer in spirit to @`await` `False`@, meaning that you can call
+    `end` anywhere within a `Process` and that will stop execution for the
+    current process branch.
+-}
+end :: Process global local label a
 end = empty
 
-branch
-    :: (Monad m, Alternative m)
-    => [Process label m result] -> Process label m result
-branch = Foldable.asum
+{-| Non-deterministically simulate multiple subroutines, like an @either@
+    statement in PlusCal
 
+    This is a synonym for `Foldable.asum`, but with a `Process`-specific type
+    signature.
+
+    The model checker will explore all branches, succeeding only if all branches
+    succeed.
+
+@
+`either` [] = `end`
+
+`either` [ a ] = a
+
+`either` [ a, b ] = a `<|>` b
+@
+-}
+either
+    :: Foldable list
+    => list (Process global local label result)
+    -- ^ Subroutines to non-deterministically select from
+    -> Process global local label result
+either = Foldable.asum
+
+{-| Non-deterministically select from one of multiple possible values, like
+    a @with@ statement in PlusCal
+
+    @with@ is the same thing as using @either@ to select from one of multiple
+    `pure` subroutines:
+
+@
+`with` results = `either` (`fmap` `pure` results)
+@
+
+@
+`with` [] = `end`
+
+`with` [ a ] = `pure` a
+
+`with` (as `<|>` bs) = `with` as `<|>` `with` bs
+
+`with` `empty` = `empty`
+@
+-}
 with
-    :: (Monad m, Alternative m, Foldable f, Functor f)
-    => f result -> Process label m result
-with results = Foldable.asum (fmap pure results)
+    :: (Foldable list, Functor list)
+    => list result -> Process global local label result
+with results = either (fmap pure results)
 
+{-| Run a loop so long as the loop condition does not return `True`, like a
+    @while@ statement in PlusCal
+
+@
+`while` (`pure` `True`) body = `Monad.forever` body
+
+`while` (`pure` `False`) body = skip
+@
+-}
 while
-    :: Monad m
-    => Process label m Bool
-    -> Process label m ()
-    -> Process label m ()
+    :: Process global local label Bool
+    -- ^ Condition
+    -> Process global local label ()
+    -- ^ Body of the loop
+    -> Process global local label ()
 while condition body = do
     bool <- condition
     Monad.when bool do
         body
         while condition body
 
-await :: (Monad m, Alternative m) => Bool -> Process label m ()
+{-| Only permit the current state transition if the predicate is `True`, like
+    an @await@ statement in PlusCal
+
+    This is a synonym for `Monad.guard`, but with a `Process`-specific type
+    signature.
+
+@
+`await` `False` = `end`
+`await` `True`  = `skip`
+
+`await` (a `||` b) = `await` a <|> `await` b
+`await` (a `&&` b) = `await` a <> `await` b
+
+`await` `False` = `empty`
+`await` `True`  = `mempty`
+@
+-}
+await :: Bool -> Process global local label ()
 await = Monad.guard
 
+{-| Throw an exception if the condition does not evaluate to `True`, like an
+    @assert@ statement in PlusCal
+
+    The model checker will fail if any branch throws an exception (with `assert`
+    or otherwise), but exceptions thrown using `assert` will also automatically
+    include the current `Process` state
+
+@
+`assert` `True` = `skip`
+@
+-}
 assert
-    :: (MonadState local m, MonadThrow m, Pretty local, Show local)
-    => Bool -> Process label m ()
+    :: (ToDocs local, Pretty global, Show local, Show global)
+    => Bool
+    -- ^ Condition
+    -> Process global local label ()
 assert True  = skip
 assert False = do
     status <- get
     Exception.throw AssertionFailed{ status }
 
-debug :: (MonadIO m, Show a) => a -> Process label m ()
-debug a = liftIO (print a)
+{-| Print a value to the console for debugging purposes, like a @print@
+    statement in PlusCal
 
+    This is the same as @"Prelude".`Prelude.print`@, except wrapped in a
+    `liftIO`
+-}
+print :: Show a => a -> Process global local label ()
+print a = liftIO (Prelude.print a)
+
+-- | All possible boolean values, like the @BOOLEAN@ set in TLA+
 boolean :: NonEmpty Bool
 boolean = False :| [ True ]
 
+-- | A function set, like @->@ in TLA+
 (~>)
     :: (Eq key, Hashable key)
     => NonEmpty key -> NonEmpty value -> NonEmpty (HashMap key value)
@@ -297,9 +518,19 @@ keys ~> values =
   where
     process key = fmap ((,) key) values
 
+-- | The domain of a function set, like the @DOMAIN@ function in TLA+
 domain :: HashMap key value -> [key]
 domain = HashMap.keys
 
+{-| The range of a function set, like the @RANGE@ function that projects
+    commonly define
+-}
+range :: HashMap key value -> [value]
+range = HashMap.elems
+
+{-| The `ModelException` type represents all of the ways in which the model
+    checker can fail
+-}
 data ModelException =
           forall label status
       .   ( Show label
@@ -307,14 +538,19 @@ data ModelException =
           , Pretty label
           , Pretty status
           )
-      =>  Deadlock { history :: [(label, status)] }
-          -- ^ NOTE: The history is stored in reverse
+      =>  Nontermination { history :: [(label, status)] }
+          -- The process does not necessarily terminate because at least one
+          -- branch of execution permits an infinite cycle
+          --
+          -- ^ NOTE: The `history` field stores old states in reverse
+          --   chronological order, for efficiency
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { status :: local }
+          -- The process failed to satisfy an `assert` statement
 
 instance Show ModelException where
-    showsPrec _ Deadlock{ history } =
-          showString "Deadlock {history = "
+    showsPrec _ Nontermination{ history } =
+          showString "Nontermination {history = "
         . Show.showListWith shows history
         . showString "}"
     showsPrec _ AssertionFailed{ status } =
@@ -328,9 +564,9 @@ instance Exception ModelException where
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
 instance Pretty ModelException where
-    pretty Deadlock{ history } = Pretty.group (Pretty.flatAlt long short)
+    pretty Nontermination{ history } = Pretty.group (Pretty.flatAlt long short)
       where
-        short = "Deadlock detected" <> suffix
+        short = "Non-termination" <> suffix
           where
             suffix = case history of
                 [] ->
@@ -342,7 +578,7 @@ instance Pretty ModelException where
                     adapt (label, status) =
                         commas [ pretty label, pretty status ]
 
-        long = Pretty.align ("Deadlock detected" <> suffix)
+        long = Pretty.align ("Non-termination" <> suffix)
           where
             suffix = case history of
                 [] ->
@@ -374,6 +610,12 @@ instance Pretty ModelException where
             <>  pretty status
             )
 
+{-| Run the model checker on a `Coroutine` by supplying a `NonEmpty` list of
+    starting states
+
+    If you want to check more than one `Coroutine`, then combine those
+    `Coroutine`s using `Applicative` operations or @ApplicativeDo@ notation
+-}
 check
     :: ( Eq global
        , Eq label
@@ -387,7 +629,7 @@ check
     => NonEmpty global
     -- ^ Starting global state
     -> Coroutine global label
-    -- ^
+    -- ^ `Coroutine` to check
     -> IO ()
 check startingGlobals Begin{ startingLabel, startingLocal, process } = do
     result <- Exception.try (List.runListT (State.evalStateT action startingStatus))
@@ -407,7 +649,11 @@ check startingGlobals Begin{ startingLabel, startingLocal, process } = do
 
     startingStatus =
         Status
-            { _global = NonEmpty.head startingGlobals
+            { -- The starting value of `_global` doesn't matter here since we
+              -- will override at the beginning of @action@.  We could use
+              -- @undefined@ here, but as a precaution we use the beginning of
+              -- the `NonEmpty` list instead
+              _global = NonEmpty.head startingGlobals
             , _local = startingLocal
             }
 
@@ -429,12 +675,18 @@ check startingGlobals Begin{ startingLabel, startingLocal, process } = do
 
                 if HashSet.member key seen
                     then do
-                        Exception.throw (Deadlock newHistory)
+                        Exception.throw (Nontermination newHistory)
                     else do
                         let newSeen = HashSet.insert key seen
 
                         loop newHistory newSeen rest
 
+{-| Class used for pretty-printing the local state
+
+    The reason for not using the `Pretty` class is because the local state is
+    internally represented as nested 2-tuples, which will look ugly when
+    pretty-printed using the `Pretty` class
+-}
 class ToDocs a where
     toDocs :: a -> [Doc ann]
     default toDocs :: Pretty a => a -> [Doc ann]
