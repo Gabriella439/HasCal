@@ -1,9 +1,8 @@
-{-# LANGUAGE BlockArguments     #-}
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE BlockArguments  #-}
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE DeriveGeneric   #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {-| This example is taken from sections 2.0 through 2.4 of "A PlusCal User's
     Manual"
@@ -18,8 +17,7 @@ import Test.Tasty (TestTree)
 import qualified Test.Tasty.HUnit as HUnit
 
 data State = State { _u :: Int, _v :: Int }
-    deriving stock (Eq, Generic, Show)
-    deriving anyclass (Hashable)
+    deriving (Eq, Generic, Hashable, Show)
 
 makeLenses ''State
 
@@ -64,5 +62,5 @@ gcd x y = choose [ 1 .. x ] \i ->
             ==> i >= j
 
 test_euclidAlg :: TestTree
-test_euclidAlg = HUnit.testCase "Euclid's algorithm"  do
+test_euclidAlg = HUnit.testCase "Euclid's algorithm" do
     euclidAlg 4
