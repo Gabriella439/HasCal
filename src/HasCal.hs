@@ -57,10 +57,16 @@ module HasCal
 
     -- * Re-exports
     , module Lens.Micro.Platform
+    , Generic
+    , HashMap
+    , NonEmpty(..)
+    , Void
+    , Alternative(..)
     , Hashable
     , MonadIO(..)
     , Pretty(..)
-    , HashMap
+    , Pretty.unsafeViaShow
+    , Monad.when
     ) where
 
 import Control.Applicative (Alternative(..), liftA2)
