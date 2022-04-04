@@ -53,13 +53,14 @@ euclidAlg n = do
         return State{..}
 
 gcd :: Int -> Int -> Maybe Int
-gcd x y = choose [ 1 .. x ] \i ->
-        x `mod` i == 0
-    &&  y `mod` i == 0
-    &&  forall_ [ 1 .. x ] \j ->
-                x `mod` j == 0
-            &&  y `mod` j == 0
-            ==> i >= j
+gcd x y =
+    choose [ 1 .. x ] \i ->
+            x `mod` i == 0
+        &&  y `mod` i == 0
+        &&  forall_ [ 1 .. x ] \j ->
+                    x `mod` j == 0
+                &&  y `mod` j == 0
+                ==> i >= j
 
 test_euclidAlg :: TestTree
 test_euclidAlg = HUnit.testCase "Euclid's algorithm" do
