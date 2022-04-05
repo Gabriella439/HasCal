@@ -570,8 +570,8 @@ boolean = False :| [ True ]
 
 -- | A function set, like @->@ in TLA+
 (~>)
-    :: (Eq key, Hashable key)
-    => NonEmpty key -> NonEmpty value -> NonEmpty (HashMap key value)
+    :: (Traversable domain, Applicative range, Eq key, Hashable key)
+    => domain key -> range value -> range (HashMap key value)
 keys ~> values =
     fmap (HashMap.fromList . Foldable.toList) (traverse process keys)
   where
