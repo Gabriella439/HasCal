@@ -14,14 +14,15 @@ import HasCal
 import Prelude hiding (gcd, print)
 import Test.Tasty (TestTree)
 
+import qualified Prelude
 import qualified Test.Tasty.HUnit as HUnit
 
-data State = State { _u :: Int, _v :: Int }
+data Global = Global { _u :: Int, _v :: Int }
     deriving (Eq, Generic, Hashable, Show)
 
-makeLenses ''State
+makeLenses ''Global
 
-instance Pretty State where
+instance Pretty Global where
     pretty = unsafeViaShow
 
 initialU :: Int
@@ -45,12 +46,13 @@ euclidAlg n = do
                 global.u -= newV
             finalV <- use (global.v)
             assert (Just finalV == gcd initialU initialV)
+            assert (finalV == Prelude.gcd initialU initialV)
             end
 
-    check Begin{..} do
+    check defaultOptions{ debug = True, termination = True } Begin{..} do
         _v <- fromList [ 1 .. n ]
         let _u = initialU
-        return State{..}
+        return Global{..}
 
 gcd :: Int -> Int -> Maybe Int
 gcd x y =
