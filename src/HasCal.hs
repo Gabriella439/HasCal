@@ -36,8 +36,9 @@ module HasCal
     , ModelException(..)
 
     -- * Model checking
+    , Options(..)
+    , defaultOptions
     , check
-    , debug
 
     -- * Lenses
     , global
@@ -61,6 +62,7 @@ module HasCal
     , (<=>)
     , boolean
     , (~>)
+    , (|->)
     , domain
     , range
     , choose
@@ -93,6 +95,7 @@ import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Text (Text)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Exts (fromList)
@@ -112,6 +115,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text as Text
 import qualified Data.Void as Void
 import qualified List.Transformer as List
 import qualified Prelude
@@ -123,10 +127,18 @@ import qualified Text.Show as Show
 -- TODO: Add highlighting to pretty-printed output
 -- TODO: Associate local state with process names
 -- TODO: Explicitly enumerate re-exports
--- TODO: Upstream orphan instance for `MonadThrow (ListT m)`
 
-instance MonadThrow m => MonadThrow (ListT m) where
-    throwM e = lift (throwM e)
+hoistListT
+    :: Functor m
+    => (m (List.Step n a) -> n (List.Step n a)) -> ListT m a -> ListT n a
+hoistListT nat (List.ListT x) = List.ListT (nat (fmap (hoistStep nat) x))
+
+hoistStep
+    :: Functor m
+    => (m (List.Step n a) -> n (List.Step n a))
+    -> List.Step m a -> List.Step n a
+hoistStep nat (List.Cons a as) = List.Cons a (hoistListT nat as)
+hoistStep _    List.Nil        = List.Nil
 
 {-| A `Process` represents a sequence of @PlusCal@ statements.  You can think of
     a `Process` as a non-deterministic finite automaton:
@@ -192,6 +204,9 @@ instance Monad (Process global local label) where
                 return (Yield label (rest >>= f))
             Done result -> possibilities (f result)
 
+instance MonadFail (Process global local label) where
+    fail message = throwM (Failure (Text.pack message))
+
 instance Alternative (Process global local label) where
     empty = Choice empty
 
@@ -211,7 +226,7 @@ instance MonadState (Status global local) (Process global local label) where
     state k = Choice (fmap Done (state k))
 
 instance MonadThrow (Process global local label) where
-    throwM e = Choice (fmap Done (throwM e))
+    throwM e = Choice (fmap Done (liftIO (throwM e)))
 
 instance MonadIO (Process global local label) where
     liftIO io = Choice (fmap Done (liftIO io))
@@ -260,7 +275,7 @@ instance (Pretty global, ToDocs local) => Pretty (Status global local) where
                     <>  "Local:"
                     <>  Pretty.hardline
                     <>  "  "
-                    <>  bullets localDocs
+                    <>  Pretty.align (bullets localDocs)
                     )
 
         localDocs = toDocs _local
@@ -568,7 +583,7 @@ infixr 1 ==>, <=>
 boolean :: NonEmpty Bool
 boolean = False :| [ True ]
 
--- | A function set, like @->@ in TLA+
+-- | A function set, like the @->@ operator in TLA+
 (~>)
     :: (Traversable domain, Applicative range, Eq key, Hashable key)
     => domain key -> range value -> range (HashMap key value)
@@ -576,6 +591,14 @@ keys ~> values =
     fmap (HashMap.fromList . Foldable.toList) (traverse process keys)
   where
     process key = fmap ((,) key) values
+
+-- | A function set, like the @|->@ operator in TLA+
+(|->)
+    :: (Foldable list, Functor list, Eq key, Hashable key)
+    => list key -> (key -> value) -> HashMap key value
+keys |-> function = HashMap.fromList (Foldable.toList (fmap adapt keys))
+  where
+    adapt key = (key, function key)
 
 {-| The domain of a function set, like the @DOMAIN@ function in TLA+
 
@@ -597,7 +620,7 @@ range = HashMap.elems
 
     `choose` is like `List.find`, but with the arguments `flip`ped.
 -}
-choose :: Foldable list =>  list a -> (a -> Bool) -> Maybe a
+choose :: Foldable list => list a -> (a -> Bool) -> Maybe a
 choose = flip List.find
 
 {-| The `ModelException` type represents all of the ways in which the model
@@ -619,6 +642,8 @@ data ModelException =
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { status :: local }
           -- The process failed to satisfy an `assert` statement
+    |     Failure { message :: Text }
+          -- ^ Used by the `fail` method
 
 instance Show ModelException where
     showsPrec _ Nontermination{ history } =
@@ -628,6 +653,10 @@ instance Show ModelException where
     showsPrec _ AssertionFailed{ status } =
           showString "AssertionFailed {status = "
         . shows status
+        . showString "}"
+    showsPrec _ Failure{ message } =
+          showString "Failure {message = "
+        . shows message
         . showString "}"
 
 instance Exception ModelException where
@@ -682,6 +711,24 @@ instance Pretty ModelException where
             <>  pretty status
             )
 
+    pretty Failure{ message } = "Failure: " <> pretty message
+
+-- | Model-checking options
+data Options = Options
+    { termination :: Bool
+      -- ^ When `True`, throw an exception if any cycles are detected
+    , debug :: Bool
+      -- ^ When `True`, pretty-print any exception before throwing the
+      --   exception
+    }
+
+{-| Default model-checking options
+
+> defaultOptions = Options{ termination = False, debug = False }
+-}
+defaultOptions :: Options
+defaultOptions = Options{ termination = False, debug = False }
+
 {-| Run the model checker on a `Coroutine` by supplying a `NonEmpty` list of
     starting states
 
@@ -698,15 +745,23 @@ check
        , Show global
        , Show label
        )
-    => Coroutine global label
+    => Options
+    -- ^ Model checking options
+    -> Coroutine global label
     -- ^ `Coroutine` to check
     -> NonEmpty global
     -- ^ Starting global state
     -> IO ()
-check Begin{ startingLabel, startingLocal, process } startingGlobals = do
-    List.runListT (State.evalStateT action startingStatus)
+check
+    Options{ debug, termination }
+    Begin{ startingLabel, startingLocal, process } startingGlobals = do
+        handler
+            (State.evalStateT
+                (List.runListT (State.evalStateT action startingStatus))
+                startingSet
+            )
   where
-    action = loop [] startingSet do
+    action = loop [ startingKey ] do
         startingGlobal <- with (Foldable.toList startingGlobals)
 
         global .= startingGlobal
@@ -723,10 +778,12 @@ check Begin{ startingLabel, startingLocal, process } startingGlobals = do
             , _local = startingLocal
             }
 
-    startingSet = HashSet.singleton (startingLabel, startingStatus)
+    startingKey = (startingLabel, startingStatus)
 
-    loop history !seen (Choice steps) = do
-        step <- steps
+    startingSet = HashSet.singleton startingKey
+
+    loop history (Choice steps) = do
+        step <- State.mapStateT (hoistListT lift) steps
 
         case step of
             Done void -> do
@@ -739,40 +796,29 @@ check Begin{ startingLabel, startingLocal, process } startingGlobals = do
 
                 let newHistory = key : history
 
+                seen <- lift get
+
                 if HashSet.member key seen
                     then do
-                        Exception.throw (Nontermination newHistory)
+                        if termination
+                            then do
+                                liftIO (Exception.throw (Nontermination newHistory))
+                            else do
+                                empty
                     else do
-                        let newSeen = HashSet.insert key seen
+                        lift (State.put $! HashSet.insert key seen)
 
-                        loop newHistory newSeen rest
+                        loop newHistory rest
 
-{-| `debug` is like `check` except that it will catch and pretty-print
-     `ModelException`s
--}
-debug
-    :: ( Eq global
-       , Eq label
-       , Hashable global
-       , Hashable label
-       , Pretty label
-       , Pretty global
-       , Show global
-       , Show label
-       )
-    => Coroutine global label
-    -- ^ `Coroutine` to check
-    -> NonEmpty global
-    -- ^ Starting global state
-    -> IO ()
-debug coroutine startingGlobals = do
-    result <- Exception.try (check coroutine startingGlobals)
-
-    case result of
-        Left  exception ->
-            Pretty.Text.putDoc (pretty (exception :: ModelException))
-        Right () ->
-            mempty
+    handler :: IO a -> IO a
+    handler
+        | debug     = Exception.handle display
+        | otherwise = id
+      where
+        display :: ModelException -> IO a
+        display exception = do
+            Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
+            Exception.throwIO exception
 
 {-| Class used for pretty-printing the local state
 

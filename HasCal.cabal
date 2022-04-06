@@ -19,6 +19,7 @@ library
                     , mtl
                     , prettyprinter
                     , safe-exceptions
+                    , text
                     , transformers
                     , unordered-containers
     hs-source-dirs:   src
