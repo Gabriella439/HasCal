@@ -13,8 +13,6 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
-{-# OPTIONS_GHC -Wall -Wno-orphans #-}
-
 {-| This documentation assumes that you are already familiar with PlusCal and
     TLA+.  If not, then you will probably want to read at least one of the
     following resources first:
