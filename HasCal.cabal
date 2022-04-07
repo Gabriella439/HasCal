@@ -16,7 +16,6 @@ library
                     , hashable
                     , list-transformer
                     , microlens-platform
-                    , mmorph
                     , mtl
                     , prettyprinter
                     , safe-exceptions
