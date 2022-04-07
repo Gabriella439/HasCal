@@ -7,7 +7,7 @@ let
   f = { mkDerivation, base, exceptions, hashable, lib
       , list-transformer, microlens-platform, mtl, prettyprinter
       , safe-exceptions, tasty, tasty-discover, tasty-expected-failure
-      , tasty-hunit, transformers, unordered-containers
+      , tasty-hunit, text, transformers, unordered-containers
       }:
       mkDerivation {
         pname = "HasCal";
@@ -15,7 +15,8 @@ let
         src = ./.;
         libraryHaskellDepends = [
           base exceptions hashable list-transformer microlens-platform mtl
-          prettyprinter safe-exceptions transformers unordered-containers
+          prettyprinter safe-exceptions text transformers
+          unordered-containers
         ];
         testHaskellDepends = [
           base tasty tasty-discover tasty-expected-failure tasty-hunit
