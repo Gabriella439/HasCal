@@ -29,20 +29,22 @@
 -}
 
 module HasCal
-    ( -- * Types
+    ( -- * Concurrent processes
       Process
     , Coroutine(..)
+
+      -- * State management
     , Status(..)
+    , global
+    , local
+
+      -- * Error handling
     , ModelException(..)
 
     -- * Model checking
     , Options(..)
     , defaultOptions
     , check
-
-    -- * Lenses
-    , global
-    , local
 
     -- * PlusCal Statements
     , yield
@@ -372,10 +374,20 @@ instance Monoid label => Monoid (Coroutine global label) where
     mempty = pure mempty
 
 {-| End the current atomic transition alongside a label for the current state.
-    If the exact same label and state have been reached before then the
-    model checker will fail with a `NonTermination` error
+    This potentially yields control to other `Process`es.
 
-    This potentially yields control to other `Process`es
+    If the exact same label and state have been reached before then the
+    model checker behavior depends on whether you enable the `termination`
+    check:
+
+    * If you enable the `termination` check then the model checker will `throw`
+      a `Nontermination` exception since revisiting the same state indicates a
+      simulation path that permits an infinite loop
+
+    * If you disable the `termination` check then the model checker will
+      `end` the current simulation branch since it has already visited this
+      state before
+
 -}
 yield :: label -> Process global local label ()
 yield label = Choice (pure (Yield label mempty))
@@ -438,10 +450,20 @@ end = empty
     The model checker will explore all branches, succeeding only if all branches
     succeed.
 
+    `either` obeys the following laws:
+
+@
+`either` [ a ] = a
+
+`either` (as `<|>` bs) = `either` as `<|>` `either` bs
+
+`either` `empty` = `empty`
+@
+
+    … which implies that:
+
 @
 `either` [] = `end`
-
-`either` [ a ] = a
 
 `either` [ a, b ] = a `<|>` b
 @
@@ -456,22 +478,29 @@ either = Foldable.asum
 {-| Non-deterministically select from one of multiple possible values, like
     a @with@ statement in PlusCal
 
-    @with@ is the same thing as using @either@ to select from one of multiple
+    `with` is the same thing as using `either` to select from one of multiple
     `pure` subroutines:
 
 @
 `with` results = `either` (`fmap` `pure` results)
 @
 
+    `with` obeys the following laws:
+
 @
-`with` [] = `end`
-
-`with` [ a ] = `pure` a
-
 `with` (as `<|>` bs) = `with` as `<|>` `with` bs
 
 `with` `empty` = `empty`
+
+`with` [ a ] = `pure` a
 @
+
+    … which implies that:
+
+@
+`with` [] = `end`
+@
+
 -}
 with
     :: (Foldable list, Functor list)
