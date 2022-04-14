@@ -31,6 +31,9 @@ module HasCal.Temporal
 
     -- * Universe
     , Universe(..)
+
+    -- * Re-exports
+    , Arrow(..)
     ) where
 
 import Control.Applicative (liftA2)

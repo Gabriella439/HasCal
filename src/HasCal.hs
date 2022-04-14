@@ -71,6 +71,7 @@ module HasCal
     , ToDocs(..)
 
     -- * Re-exports
+    , module HasCal.Temporal
     , module Lens.Micro.Platform
     , Generic
     , HashMap
@@ -100,6 +101,7 @@ import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Exts (fromList)
 import GHC.Generics (Generic)
+import HasCal.Temporal hiding (check)
 import Lens.Micro.Platform
 import List.Transformer (ListT)
 import Numeric.Natural (Natural)
@@ -110,6 +112,7 @@ import qualified Control.Applicative as Applicative
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Strict as State
+import qualified Control.Monad.State.Lazy as State.Lazy
 import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
@@ -117,6 +120,7 @@ import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Data.Void as Void
+import qualified HasCal.Temporal as Temporal
 import qualified List.Transformer as List
 import qualified Prelude
 import qualified Prettyprinter as Pretty
@@ -355,15 +359,15 @@ instance Applicative (Coroutine global) where
               where
                 (labelFX, restFX) = loop (label1F, Choice fs) (labelX, restX)
 
-        onLeft :: Lens' (Status global (l, r)) (Status global l)
-        onLeft k (Status g (l, r)) = fmap adapt (k (Status g l))
-          where
-            adapt (Status g' l') = Status g' (l', r)
+            onLeft :: Lens' (Status global (l, r)) (Status global l)
+            onLeft k (Status g (l, r)) = fmap adapt (k (Status g l))
+              where
+                adapt (Status g' l') = Status g' (l', r)
 
-        onRight :: Lens' (Status global (l, r)) (Status global r)
-        onRight k (Status g (l, r)) = fmap adapt (k (Status g r))
-          where
-            adapt (Status g' r') = Status g' (l, r')
+            onRight :: Lens' (Status global (l, r)) (Status global r)
+            onRight k (Status g (l, r)) = fmap adapt (k (Status g r))
+              where
+                adapt (Status g' r') = Status g' (l, r')
 
 instance Semigroup label => Semigroup (Coroutine global label) where
     (<>) = liftA2 (<>)
@@ -669,6 +673,8 @@ data ModelException =
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { status :: local }
           -- The process failed to satisfy an `assert` statement
+    |     PropertyFailure
+          -- TODO: Provide more details
     |     Failure { message :: Text }
           -- ^ Used by the `fail` method
 
@@ -681,6 +687,8 @@ instance Show ModelException where
           showString "AssertionFailed {status = "
         . shows status
         . showString "}"
+    showsPrec _ PropertyFailure =
+          showString "PropertyFailure"
     showsPrec _ Failure{ message } =
           showString "Failure {message = "
         . shows message
@@ -738,6 +746,8 @@ instance Pretty ModelException where
             <>  pretty status
             )
 
+    pretty PropertyFailure = "Property failure"
+
     pretty Failure{ message } = "Failure: " <> pretty message
 
 -- | Model-checking options
@@ -776,76 +786,91 @@ check
     -- ^ Model checking options
     -> Coroutine global label
     -- ^ `Coroutine` to check
+    -> Property (label, global) Bool
+    -- ^ `Property` to check
     -> NonEmpty global
     -- ^ Starting global state
     -> IO ()
 check
     Options{ debug, termination }
-    Begin{ startingLabel, startingLocal, process } startingGlobals = do
-        handler
-            (State.evalStateT
-                (List.runListT (State.evalStateT action startingStatus))
-                startingSet
-            )
-  where
-    action = loop [ startingKey ] do
-        startingGlobal <- with (Foldable.toList startingGlobals)
+    Begin{ startingLabel, startingLocal, process }
+    property
+    startingGlobals =
+    case Temporal.check property of
+        Check expectedFinalState stepProperty ->
+            handler
+                (State.evalStateT
+                    (List.runListT (State.evalStateT action startingStatus))
+                    startingSet
+                )
+          where
+            action = do
+                propertyStatus <- lift (List.select universe)
 
-        global .= startingGlobal
+                loop True propertyStatus [ startingKey ] do
+                    startingGlobal <- with (Foldable.toList startingGlobals)
 
-        process
+                    global .= startingGlobal
 
-    startingStatus =
-        Status
-            { -- The starting value of `_global` doesn't matter here since we
-              -- will override at the beginning of @action@.  We could use
-              -- @undefined@ here, but as a precaution we use the beginning of
-              -- the `NonEmpty` list instead
-              _global = NonEmpty.head startingGlobals
-            , _local = startingLocal
-            }
+                    process
 
-    startingKey = (startingLabel, startingStatus)
+            startingKey = (startingLabel, startingStatus)
 
-    startingSet = HashSet.singleton startingKey
+            startingStatus =
+                Status
+                    { -- The starting value of `_global` doesn't matter here
+                      -- since we will override at the beginning of @action@.
+                      -- We could use @undefined@ here, but as a precaution we
+                      -- use the beginning of the `NonEmpty` list instead
+                      _global = NonEmpty.head startingGlobals
+                    , _local = startingLocal
+                    }
 
-    loop history (Choice steps) = do
-        step <- State.mapStateT (hoistListT lift) steps
 
-        case step of
-            Done void -> do
-                Void.absurd void
+            startingSet = HashSet.empty
 
-            Yield label rest -> do
-                status <- get
+            loop initial propertyStatus history (Choice steps) = do
+                step <- State.mapStateT (hoistListT lift) steps
 
-                let key = (label, status)
+                case step of
+                    Done void -> do
+                        Void.absurd void
 
-                let newHistory = key : history
+                    Yield label rest -> do
+                        status <- get
 
-                seen <- lift get
+                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (label, _global status)) propertyStatus))
 
-                if HashSet.member key seen
-                    then do
-                        if termination
-                            then do
-                                liftIO (Exception.throw (Nontermination newHistory))
-                            else do
-                                empty
-                    else do
-                        lift (State.put $! HashSet.insert key seen)
+                        let seenKey = (label, status, newPropertyStatus)
 
-                        loop newHistory rest
+                        let historyKey = (label, status)
 
-    handler :: IO a -> IO a
-    handler
-        | debug     = Exception.handle display
-        | otherwise = id
-      where
-        display :: ModelException -> IO a
-        display exception = do
-            Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
-            Exception.throwIO exception
+                        let newHistory = historyKey : history
+
+                        Monad.unless (initial ==> valid) do
+                            liftIO (Exception.throw PropertyFailure)
+
+                        seen <- lift get
+
+                        Monad.when (HashSet.member seenKey seen) empty
+
+                        -- TODO: Use more efficient history check
+                        Monad.when (historyKey `elem` history && termination) do
+                            liftIO (Exception.throw (Nontermination newHistory))
+
+                        lift (State.put $! HashSet.insert seenKey seen)
+
+                        loop False newPropertyStatus newHistory rest
+
+            handler :: IO a -> IO a
+            handler
+                | debug     = Exception.handle display
+                | otherwise = id
+              where
+                display :: ModelException -> IO a
+                display exception = do
+                    Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
+                    Exception.throwIO exception
 
 {-| Class used for pretty-printing the local state
 

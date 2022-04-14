@@ -35,7 +35,7 @@ instance Pretty Label where
     pretty = unsafeViaShow
 
 fastMutex :: Int -> IO ()
-fastMutex n = check defaultOptions{ debug = True } coroutines do
+fastMutex n = check defaultOptions{ debug = True } coroutines property do
     let _x = 0
     let _y = 0
     let _b = [ 1.. n ] |-> \_i -> False
@@ -43,6 +43,11 @@ fastMutex n = check defaultOptions{ debug = True } coroutines do
   where
     coroutines :: Coroutine Global [Label]
     coroutines = for [ 1 .. n ] proc
+
+    property :: Property ([Label], Global) Bool
+    property = arr predicate
+      where
+        predicate (labels, _) = length (filter (== CriticalSection) labels) <= 1
 
     proc :: Int -> Coroutine Global Label
     proc self = Begin{..}
