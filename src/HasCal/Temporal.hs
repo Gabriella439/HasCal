@@ -9,11 +9,15 @@
 {-# LANGUAGE TypeApplications          #-}
 
 module HasCal.Temporal
-    ( Property
-    , Check(..)
+    (
+    -- * Property
+      Property
     , eventually
     , always
     , infer
+
+    -- * Check
+    , Check(..)
     , check
     , checkList
     ) where
@@ -187,9 +191,89 @@ instance (Universe a, Universe b) => Universe (Pair a b) where
 instance Universe Bool where
     universe = [ False, True ]
 
-data Check a b =
-        forall s . (Eq s, Hashable s, Universe s)
-    =>  Check s (a -> StateT s [] b)
+{-| This property outputs `True` if the current input or any future input is
+    `True`, and outputs `False` otherwise
+-}
+eventually :: Property Bool Bool
+eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
+
+{-| This property outputs `False` if the current input or any future input is
+    `False`, and outputs `True` otherwise
+-}
+always :: Property Bool Bool
+always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
+
+{-| Convert a `Property` into the equivalent list transformation
+
+    >>> infer (arr even) [ 2, 3, 5 ]
+    [True,False,False]
+    >>> infer eventually [ False, True, False ]
+    [True,True,False]
+    >>> infer always [ True, False, True ]
+    [False,False,True]
+    >>> infer (always . arr odd) [ 2, 3, 5 ]
+    [False,True,True]
+    >>> infer (eventually . arr even) [ 2, 3, 5 ]
+    [True,False,False]
+    >>> infer (eventually . always . arr odd) [ 2, 3, 5 ]
+    [True,True,True]
+    >>> infer (eventually . always . arr even) [ 2, 3, 5 ]
+    [False,False,False]
+
+    Note that `infer` has to `reverse` the list twice in order to infer the
+    outputs from the inputs, so `infer` does not run in constant space.  Use
+    `check` or `checkList` if you want something that processes the input in a
+    single forward pass.
+-}
+infer :: Property input output -> [input] -> [output]
+infer (Property s k) as =
+    reverse (State.evalState (traverse k (reverse as)) s)
+
+{-| A `Check` is like a temporal `Property` except that you can check a sequence
+    of @input@s against a corresponding sequence of @output@s in a single
+    forward pass in constant space.  This `Check` has the following two
+    performance properties:
+
+    * The `Check` can terminate early with a negative result if it determines
+      that the temporal `Property` can no longer hold, regardless of future
+      @input@ / @output@ values
+
+    * The `Check` cannot terminate early if the @input@ / @output@ pairs satisfy
+      the original temporal `Property`.  The entire sequence must be traversed
+      in order to establish an affirmative result
+
+    Unlike `Property`, a `Check` cannot infer the @output@s from the @input@s
+    because doing so would require knowing in advance what the future @input@s
+    would be, and that is incompatible with traversing the @input@s in a single
+    forward pass.  For example, @`check` `always`@ cannot necessarily tell if
+    the current @output@ should return `True` until it has seen all future
+    @input@s, too.
+
+    Other than the difference in algorithmic complexity, the `Check` type is
+    similar to the `Property` type, meaning that they both share the same type
+    parameters and the same instances.  However, you generally should prefer to
+    use the instance for the `Property` type because those are more efficient.
+
+    The main difference between `Property` and `Check`  is that the `Property`
+    type is abstract, whereas the `Check` type is not  That means that you can
+    pattern match on the `Check` type in order to obtain two values:
+
+    * A stateful step function that you feed an inputs to get a list of
+      acceptable outputs
+    * An expected final state
+
+    Study the source code for the `checkList` utility if you want to see an
+    example for how you would use these two values to validate a list of
+    @input@ / @output@ pairs against a temporal `Property`.
+-}
+data Check input output =
+        forall state . (Eq state, Hashable state, Universe state)
+    =>  Check
+            state
+            -- ^ Expected final state
+            (input -> StateT state [] output)
+            -- ^ Given an @input@ and an old @state@, return a list of possible
+            --   new @(output, state)@ pairs
 
 instance Functor (Check a) where
     fmap f (Check s k) = Check s (fmap f . k)
@@ -273,36 +357,6 @@ instance Profunctor Check where
 
     rmap = fmap
 
-{-| This property outputs `True` if the current input or any future input is
-    `True`, and outputs `False` otherwise
--}
-eventually :: Property Bool Bool
-eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
-
-{-| This property outputs `False` if the current input or any future input is
-    `False`, and outputs `True` otherwise
--}
-always :: Property Bool Bool
-always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
-
-{-| Convert a `Property` into the equivalent list transformation
-
-    >>> infer (arr even) [ 2, 3, 5 ]
-    [True,False,False]
-    >>> infer (eventually . always) [ False, True ]
-    [True,True]
-    >>> infer (eventually . always) [ True, False ]
-    [False,False]
-
-    Note that `infer` has to `reverse` the list twice in order to infer the
-    outputs from the inputs, so `infer` does not run in constant space.  Use
-    `check` or `checkList` if you want something that processes the input in a
-    single forward pass.
--}
-infer :: Property input output -> [input] -> [output]
-infer (Property s k) as =
-    reverse (State.evalState (traverse k (reverse as)) s)
-
 {-| Convert a `Property` into a `Check`
 
     See the documentation for `Check` for more details on how to use a
@@ -324,22 +378,13 @@ check (Property s k) = Check s k'
 {-| This function checks that a list of @input@ and @output@ pairs is
     consistent with the given temporal `Property`
 
-    >>> checkList (arr even) [(2, True), (3, False), (5, False)]
-    True
-    >>> checkList (arr even) [(2, True), (3, False), (5, True)]
-    False
-    >>> checkList (eventually . always) [(True, False), (False, False)]
-    True
-    >>> checkList (eventually . always) [(False, True), (True, True)]
-    True
-
     You can think of `checkList` as having the following definition:
 
     > checkList property pairs =
-    >     transform property (map fst pairs) == map snd pairs
+    >     infer property (map fst pairs) == map snd pairs
 
     … except that `checkList` processes the list in a single forward pass
-    (unlike `transform`)
+    (unlike `infer`)
 -}
 checkList :: Eq output => Property input output -> [(input, output)] -> Bool
 checkList temporal =
