@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns              #-}
 {-# LANGUAGE BlockArguments            #-}
+{-# LANGUAGE DefaultSignatures         #-}
 {-# LANGUAGE DeriveAnyClass            #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE DerivingStrategies        #-}
@@ -7,6 +8,13 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TupleSections             #-}
 {-# LANGUAGE TypeApplications          #-}
+
+{-| This module implements support for temporal logic
+
+    Specifically, the module provides a temporal `Property` type and utilities
+    for creating and checking `Property`s against sequences of inputs and
+    outputs
+-}
 
 module HasCal.Temporal
     (
@@ -20,6 +28,9 @@ module HasCal.Temporal
     , Check(..)
     , check
     , checkList
+
+    -- * Universe
+    , Universe(..)
     ) where
 
 import Control.Applicative (liftA2)
@@ -59,7 +70,7 @@ import qualified Data.HashMap.Strict       as HashMap
 
     * (`.`) - You can compose two `Property`s end-to-end, feeding the @output@
       of one property as the @input@ to another `Property`
-    * `Applicative` operations (or `do` notation if you enable `ApplicativeDo`)
+    * `Applicative` operations (or `do` notation if you enable @ApplicativeDo@)
       - this shares their @input@ and combines their @output@s pointwise
     * (`<>`) - This combines their @output@s pointwise using (`<>`)
     * Numeric operators - These operators combine their @output@s pointwise
@@ -79,6 +90,15 @@ import qualified Data.HashMap.Strict       as HashMap
 data Property input output =
         forall state . (Eq state, Hashable state, Universe state)
     =>  Property state (input -> State state output)
+{- Under the hood, a `Property` is essentially the exact same thing as the
+   `Scan` type from the @foldl@ package, but with two differences:
+
+   * The `Property` type is actually used to process the sequence of inputs
+     in reverse, resulting in a sequence of outputs that are also reversed
+
+   * We add more constraints to the existentially quantified @state@ type so
+     that we can invert the scan when converting to the `Check` type
+-}
 
 instance Functor (Property a) where
     fmap f (Property s k) = Property s (fmap f . k)
@@ -179,8 +199,16 @@ data Pair a b = Pair !a !b
     deriving stock (Eq, Generic)
     deriving anyclass (Hashable)
 
+{-| A type whose values can be enumerated
+
+    Note that `universe` should be the same thing as
+    @[ `minBound` .. `maxBound` ]@ for a type that implements `Bounded` and
+    `Enum`, but it's easier to define instances of this class directly
+-}
 class Universe a where
     universe :: [a]
+    default universe :: (Bounded a, Enum a) => [a]
+    universe = [ minBound .. maxBound ]
 
 instance Universe () where
     universe = [()]
