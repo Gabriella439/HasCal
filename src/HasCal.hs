@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DuplicateRecordFields      #-}
 {-# LANGUAGE ExistentialQuantification  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -117,7 +118,6 @@ import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Data.Void as Void
 import qualified HasCal.Temporal as Temporal
@@ -247,9 +247,9 @@ data Step global local label result
     * @local@ - The local state unique to this `Process`
 -}
 data Status global local = Status
-    { _global :: global
+    { _global :: !global
       -- ^ Shared global state
-    , _local :: local
+    , _local :: !local
       -- ^ `Process`-local state
     } deriving stock (Eq, Generic, Show)
       deriving anyclass (Hashable)
@@ -286,11 +286,11 @@ instance (Pretty global, ToDocs local) => Pretty (Status global local) where
 
 -- | `Lens'` for accessing the @global@ state of a `Process`
 global :: Lens' (Status global local) global
-global k (Status g l) = fmap (\g' -> Status g' l) (k g)
+global k (Status a b) = fmap (\a' -> Status a' b) (k a)
 
 -- | `Lens'` for accessing the @local@ state of a `Process`
 local :: Lens' (Status global local) local
-local k (Status g l) = fmap (\l' -> Status g l') (k l)
+local k (Status a b) = fmap (\b' -> Status a b') (k b)
 
 {-| A `Coroutine` wraps a `Process` alongside a starting label and starting
     process-local state.  Including the starting state makes a `Coroutine` a
@@ -568,8 +568,8 @@ assert
     -> Process global local label ()
 assert True  = skip
 assert False = do
-    status <- get
-    Exception.throw AssertionFailed{ status }
+    _status <- get
+    Exception.throw AssertionFailed{ _status }
 
 {-| Print a value to the console for debugging purposes, like a @print@
     statement in PlusCal
@@ -664,34 +664,34 @@ data ModelException =
           , Pretty label
           , Pretty status
           )
-      =>  Nontermination { history :: [(label, status)] }
+      =>  Nontermination { _history :: [(label, status)] }
           -- ^ The process does not necessarily terminate because at least one
           --   branch of execution permits an infinite cycle
           --
           --   NOTE: The `history` field stores old states in reverse
           --   chronological order, for efficiency
     |     forall local . (Pretty local, Show local)
-      =>  AssertionFailed { status :: local }
+      =>  AssertionFailed { _status :: local }
           -- The process failed to satisfy an `assert` statement
     |     PropertyFailure
           -- TODO: Provide more details
-    |     Failure { message :: Text }
+    |     Failure { _message :: Text }
           -- ^ Used by the `fail` method
 
 instance Show ModelException where
-    showsPrec _ Nontermination{ history } =
+    showsPrec _ Nontermination{ _history } =
           showString "Nontermination {history = "
-        . Show.showListWith shows history
+        . Show.showListWith shows _history
         . showString "}"
-    showsPrec _ AssertionFailed{ status } =
+    showsPrec _ AssertionFailed{ _status } =
           showString "AssertionFailed {status = "
-        . shows status
+        . shows _status
         . showString "}"
     showsPrec _ PropertyFailure =
           showString "PropertyFailure"
-    showsPrec _ Failure{ message } =
+    showsPrec _ Failure{ _message } =
           showString "Failure {message = "
-        . shows message
+        . shows _message
         . showString "}"
 
 instance Exception ModelException where
@@ -700,23 +700,23 @@ instance Exception ModelException where
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
 instance Pretty ModelException where
-    pretty Nontermination{ history } = Pretty.group (Pretty.flatAlt long short)
+    pretty Nontermination{ _history } = Pretty.group (Pretty.flatAlt long short)
       where
         short = "Non-termination" <> suffix
           where
-            suffix = case history of
+            suffix = case _history of
                 [] ->
                     mempty
 
                 seens  ->
                     " - History: " <> bars (map adapt (reverse seens))
                   where
-                    adapt (label, status) =
-                        commas [ pretty label, pretty status ]
+                    adapt (label, _status) =
+                        commas [ pretty label, pretty _status ]
 
         long = Pretty.align ("Non-termination" <> suffix)
           where
-            suffix = case history of
+            suffix = case _history of
                 [] ->
                     mempty
                 seens ->
@@ -726,29 +726,29 @@ instance Pretty ModelException where
                     <>  Pretty.hardline
                     <>  foldMap outer (reverse seens)
                   where
-                    outer (label, status) =
+                    outer (label, _status) =
                             "- "
                         <>  Pretty.align
                             (   "Label: "
                             <>  pretty label
                             <>  Pretty.hardline
                             <>  "State: "
-                            <>  pretty status
+                            <>  pretty _status
                             )
                         <>  Pretty.hardline
 
-    pretty AssertionFailed{ status } =
+    pretty AssertionFailed{ _status } =
         Pretty.align
             (   "Assertion failed"
             <>  Pretty.hardline
             <>  Pretty.hardline
             <>  "State: "
-            <>  pretty status
+            <>  pretty _status
             )
 
     pretty PropertyFailure = "Property failure"
 
-    pretty Failure{ message } = "Failure: " <> pretty message
+    pretty Failure{ _message } = "Failure: " <> pretty _message
 
 -- | Model-checking options
 data Options = Options
@@ -765,6 +765,23 @@ data Options = Options
 -}
 defaultOptions :: Options
 defaultOptions = Options{ termination = False, debug = False }
+
+{-| This type is used internally within the `check` function to keep track of
+    state specific to one \"timeline\" of the model checker (i.e. one possible
+    branch of execution)
+
+    This `Timeline` state is isolated from other branches of execution
+-}
+data Timeline global local label status = Timeline
+    { _processStatus  :: !(Status global local)
+    , _history        :: ![(label, Status global local)]
+    , _propertyStatus :: !status
+    , _initial        :: !Bool
+    }
+
+processStatus
+    :: Lens' (Timeline global local label status) (Status global local)
+processStatus k (Timeline a b c d) = fmap (\a' -> Timeline a' b c d) (k a)
 
 {-| Run the model checker on a `Coroutine` by supplying a `NonEmpty` list of
     starting states
@@ -800,54 +817,56 @@ check
         Check expectedFinalState stepProperty ->
             handler
                 (State.evalStateT
-                    (List.runListT (State.evalStateT action startingStatus))
+                    (List.runListT (State.evalStateT action uninitializedTimeline))
                     startingSet
                 )
           where
+            uninitializedTimeline =
+                error "Internal error - Uninitialized timeline"
+
             action = do
-                propertyStatus <- lift (List.select universe)
+                startingPropertyStatus <- lift (List.select universe)
 
-                loop True propertyStatus [ startingKey ] do
-                    startingGlobal <- with (Foldable.toList startingGlobals)
+                startingGlobal <- lift (List.select startingGlobals)
 
-                    global .= startingGlobal
+                let startingProcessStatus = Status
+                        { _global = startingGlobal
+                        , _local  = startingLocal
+                        }
 
-                    process
+                let startingHistory = [ (startingLabel, startingProcessStatus) ]
 
-            startingKey = (startingLabel, startingStatus)
-
-            startingStatus =
-                Status
-                    { -- The starting value of `_global` doesn't matter here
-                      -- since we will override at the beginning of @action@.
-                      -- We could use @undefined@ here, but as a precaution we
-                      -- use the beginning of the `NonEmpty` list instead
-                      _global = NonEmpty.head startingGlobals
-                    , _local = startingLocal
+                put $! Timeline
+                    { _processStatus  = startingProcessStatus
+                    , _history        = startingHistory
+                    , _propertyStatus = startingPropertyStatus
+                    , _initial        = True
                     }
 
+                loop process
 
             startingSet = HashSet.empty
 
-            loop initial propertyStatus history (Choice steps) = do
-                step <- State.mapStateT (hoistListT lift) steps
+            loop (Choice steps) = do
+                step <- zoom processStatus (State.mapStateT (hoistListT lift) steps)
 
                 case step of
                     Done void -> do
                         Void.absurd void
 
                     Yield label rest -> do
-                        status <- get
+                        Timeline{ _processStatus, _history, _propertyStatus, _initial } <- get
+                        let Status{ _global } = _processStatus
 
-                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (label, _global status)) propertyStatus))
+                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (label, _global)) _propertyStatus))
 
-                        let seenKey = (label, status, newPropertyStatus)
+                        let seenKey = (label, _processStatus, newPropertyStatus)
 
-                        let historyKey = (label, status)
+                        let historyKey = (label, _processStatus)
 
-                        let newHistory = historyKey : history
+                        let newHistory = historyKey : _history
 
-                        Monad.unless (initial ==> valid) do
+                        Monad.unless (_initial ==> valid) do
                             liftIO (Exception.throw PropertyFailure)
 
                         seen <- lift get
@@ -855,12 +874,19 @@ check
                         Monad.when (HashSet.member seenKey seen) empty
 
                         -- TODO: Use more efficient history check
-                        Monad.when (historyKey `elem` history && termination) do
+                        Monad.when (historyKey `elem` _history && termination) do
                             liftIO (Exception.throw (Nontermination newHistory))
 
                         lift (State.put $! HashSet.insert seenKey seen)
 
-                        loop False newPropertyStatus newHistory rest
+                        put $! Timeline
+                            { _processStatus 
+                            , _history = newHistory
+                            , _propertyStatus = newPropertyStatus
+                            , _initial = False
+                            }
+
+                        loop rest
 
             handler :: IO a -> IO a
             handler
