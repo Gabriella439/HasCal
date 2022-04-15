@@ -936,10 +936,10 @@ check
 
                         seen <- lift get
 
-                        Monad.when (HashSet.member seenKey seen) empty
-
                         Monad.when (HashSet.member historyKey _historySet && termination) do
                             liftIO (Exception.throw (Nontermination newHistory))
+
+                        Monad.when (HashSet.member seenKey seen) empty
 
                         lift (State.put $! HashSet.insert seenKey seen)
 
