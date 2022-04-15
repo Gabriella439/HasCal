@@ -902,6 +902,8 @@ check
                         Timeline{ _propertyStatus, _propertyHistory } <- get
 
                         Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
+                            -- TODO: Perhaps add a detail indicating that we
+                            -- reached the end of the sequence
                             liftIO (Exception.throw PropertyFailed{ _propertyHistory })
 
                     Yield label rest -> do
@@ -930,7 +932,7 @@ check
                                 propertyInput : _propertyHistory
 
                         Monad.when (HashSet.null newPropertyStatus) do
-                            liftIO (Exception.throw PropertyFailed{ _propertyHistory })
+                            liftIO (Exception.throw PropertyFailed{ _propertyHistory = newPropertyHistory })
 
                         seen <- lift get
 
