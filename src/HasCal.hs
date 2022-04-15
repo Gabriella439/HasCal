@@ -783,7 +783,7 @@ data Timeline global local label status = Timeline
       -- ^ This always the same as @`HashSet.fromList _history` `_history`@,
       --   but kept as a separate field for efficiently updating and querying
       --   which states we've seen so far in order to detect cycles
-    , _propertyStatus :: !status
+    , _propertyStatus :: !(HashSet status)
       -- ^ This stores the internal state of the temporal `Property`
     , _initial        :: !Bool
       -- ^ This is only set to `True` for the very first step of our
@@ -840,7 +840,7 @@ check
                 error "Internal error - Uninitialized timeline"
 
             action = do
-                startingPropertyStatus <- lift (List.select universe)
+                let startingPropertyStatus = HashSet.fromList universe
 
                 startingGlobal <- lift (List.select startingGlobals)
 
@@ -872,9 +872,17 @@ check
 
                     Yield label rest -> do
                         Timeline{ _processStatus, _history, _historySet, _propertyStatus, _initial } <- get
+
                         let Status{ _global } = _processStatus
 
-                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (_global, label)) _propertyStatus))
+                        let newPropertyStatus = HashSet.fromList do
+                                s <- HashSet.toList _propertyStatus
+
+                                (bool, s') <- State.Lazy.runStateT (stepProperty (_global, label)) s
+
+                                Monad.guard (_initial ==> bool)
+
+                                return s'
 
                         let seenKey = (label, _processStatus, newPropertyStatus)
 
@@ -882,7 +890,7 @@ check
 
                         let newHistory = historyKey : _history
 
-                        Monad.unless (_initial ==> valid) do
+                        Monad.when (HashSet.null newPropertyStatus) do
                             liftIO (Exception.throw PropertyFailure)
 
                         seen <- lift get
