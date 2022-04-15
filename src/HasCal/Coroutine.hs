@@ -766,10 +766,10 @@ data Options = Options
 
 {-| Default model-checking options
 
-> defaultOptions = Options{ termination = False, debug = False }
+> defaultOptions = Options{ termination = True, debug = False }
 -}
 defaultOptions :: Options
-defaultOptions = Options{ termination = False, debug = False }
+defaultOptions = Options{ termination = True, debug = False }
 
 {-| This type is used internally within the `model` function to keep track of
     state specific to one \"timeline\" of the model checker (i.e. one possible
