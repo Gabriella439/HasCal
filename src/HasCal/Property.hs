@@ -16,7 +16,7 @@
     outputs
 -}
 
-module HasCal.Temporal
+module HasCal.Property
     (
     -- * Property
       Property

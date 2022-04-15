@@ -25,12 +25,20 @@
     (i.e. eDSL) in Haskell.  In other words, this does not compile to any
     intermediate or external language; the whole thing is implemented in pure
     Haskell.
+
+    "HasCal.Coroutine" provides the API for creating and model-checking
+    concurrent `Coroutine`s
+
+    "HasCal.Property" provides the API for creating and checking temporal
+    `Property`s
 -}
 
 module HasCal
-    ( -- * Re-exports
+    ( -- * Internal re-exports
       module HasCal.Coroutine
-    , module HasCal.Temporal
+    , module HasCal.Property
+
+      -- * External re-exports
     , module Lens.Micro.Platform
     , Generic
     , HashMap
@@ -51,7 +59,7 @@ import Data.HashMap.Strict (HashMap)
 import Data.List.NonEmpty (NonEmpty(..))
 import GHC.Exts (fromList)
 import GHC.Generics (Generic)
-import HasCal.Temporal
+import HasCal.Property
 import HasCal.Coroutine
 import Lens.Micro.Platform
 import Prettyprinter (Pretty(..))
@@ -61,6 +69,3 @@ import qualified Prettyprinter as Pretty
 
 -- TODO: Add highlighting to pretty-printed output
 -- TODO: Associate local state with process names
--- TODO: Explicitly enumerate re-exports
-
-

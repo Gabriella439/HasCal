@@ -73,7 +73,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import HasCal.Temporal (Check(..), Property, Universe(..))
+import HasCal.Property (Check(..), Property, Universe(..))
 import Lens.Micro.Platform (Lens')
 import List.Transformer (ListT)
 import Numeric.Natural (Natural)
@@ -90,7 +90,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
 import qualified Data.Text as Text
-import qualified HasCal.Temporal as Temporal
+import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
 import qualified List.Transformer as List
 import qualified Prelude
@@ -813,7 +813,7 @@ model
     Begin{ startingLabel, startingLocal, process }
     property
     startingGlobals =
-    case Temporal.check property of
+    case Property.check property of
         Check finalPropertyStatus stepProperty ->
             handler
                 (State.evalStateT
