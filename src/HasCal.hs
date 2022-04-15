@@ -62,7 +62,7 @@ module HasCal
     , (==>)
     , (<=>)
     , boolean
-    , (~>)
+    , (-->)
     , (|->)
     , domain
     , range
@@ -95,6 +95,7 @@ import Control.Monad.State.Strict (MonadState(..), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
+import Data.HashSet (HashSet)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
@@ -284,11 +285,11 @@ instance (Pretty global, ToDocs local) => Pretty (Status global local) where
 
         localDocs = toDocs _local
 
--- | `Lens'` for accessing the @global@ state of a `Process`
+-- | `Lens'` for accessing the `_global` state of a `Process`
 global :: Lens' (Status global local) global
 global k (Status a b) = fmap (\a' -> Status a' b) (k a)
 
--- | `Lens'` for accessing the @local@ state of a `Process`
+-- | `Lens'` for accessing the `_local` state of a `Process`
 local :: Lens' (Status global local) local
 local k (Status a b) = fmap (\b' -> Status a b') (k b)
 
@@ -615,10 +616,10 @@ boolean :: NonEmpty Bool
 boolean = False :| [ True ]
 
 -- | A function set, like the @->@ operator in TLA+
-(~>)
+(-->)
     :: (Traversable domain, Applicative range, Eq key, Hashable key)
     => domain key -> range value -> range (HashMap key value)
-keys ~> values =
+keys --> values =
     fmap (HashMap.fromList . Foldable.toList) (traverse process keys)
   where
     process key = fmap ((,) key) values
@@ -774,14 +775,28 @@ defaultOptions = Options{ termination = False, debug = False }
 -}
 data Timeline global local label status = Timeline
     { _processStatus  :: !(Status global local)
+      -- ^ This stores the internal state of the `Process`
     , _history        :: ![(label, Status global local)]
+      -- ^ This is kept for error reporting so that if things go wrong we can
+      --   report to the user what sequence of events led up to the problem
+    , _historySet     :: !(HashSet (label, Status global local))
+      -- ^ This always the same as @`HashSet.fromList _history` `_history`@,
+      --   but kept as a separate field for efficiently updating and querying
+      --   which states we've seen so far in order to detect cycles
     , _propertyStatus :: !status
+      -- ^ This stores the internal state of the temporal `Property`
     , _initial        :: !Bool
+      -- ^ This is only set to `True` for the very first step of our
+      --   model-checking `Timeline`, because that's the only step where we
+      --   need to check if the temporal `Property` emits `True`.  For all
+      --   other steps we set this to `False` and consequently don't check the
+      --   output of the temporal `Property`
     }
 
+-- | `Lens'` for accessing the `_processStatus` field of a `Timeline`
 processStatus
     :: Lens' (Timeline global local label status) (Status global local)
-processStatus k (Timeline a b c d) = fmap (\a' -> Timeline a' b c d) (k a)
+processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
 
 {-| Run the model checker on a `Coroutine` by supplying a `NonEmpty` list of
     starting states
@@ -803,7 +818,7 @@ check
     -- ^ Model checking options
     -> Coroutine global label
     -- ^ `Coroutine` to check
-    -> Property (label, global) Bool
+    -> Property (global, label) Bool
     -- ^ `Property` to check
     -> NonEmpty global
     -- ^ Starting global state
@@ -834,11 +849,12 @@ check
                         , _local  = startingLocal
                         }
 
-                let startingHistory = [ (startingLabel, startingProcessStatus) ]
+                let historyKey = (startingLabel, startingProcessStatus)
 
                 put $! Timeline
                     { _processStatus  = startingProcessStatus
-                    , _history        = startingHistory
+                    , _history        = [ historyKey ]
+                    , _historySet     = HashSet.singleton historyKey
                     , _propertyStatus = startingPropertyStatus
                     , _initial        = True
                     }
@@ -855,10 +871,10 @@ check
                         Void.absurd void
 
                     Yield label rest -> do
-                        Timeline{ _processStatus, _history, _propertyStatus, _initial } <- get
+                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _initial } <- get
                         let Status{ _global } = _processStatus
 
-                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (label, _global)) _propertyStatus))
+                        (valid, newPropertyStatus) <- lift (List.select (State.Lazy.runStateT (stepProperty (_global, label)) _propertyStatus))
 
                         let seenKey = (label, _processStatus, newPropertyStatus)
 
@@ -873,8 +889,7 @@ check
 
                         Monad.when (HashSet.member seenKey seen) empty
 
-                        -- TODO: Use more efficient history check
-                        Monad.when (historyKey `elem` _history && termination) do
+                        Monad.when (HashSet.member historyKey _historySet && termination) do
                             liftIO (Exception.throw (Nontermination newHistory))
 
                         lift (State.put $! HashSet.insert seenKey seen)
@@ -882,6 +897,7 @@ check
                         put $! Timeline
                             { _processStatus 
                             , _history = newHistory
+                            , _historySet = HashSet.insert historyKey _historySet
                             , _propertyStatus = newPropertyStatus
                             , _initial = False
                             }

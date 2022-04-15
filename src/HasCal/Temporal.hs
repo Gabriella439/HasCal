@@ -22,6 +22,7 @@ module HasCal.Temporal
       Property
     , eventually
     , always
+    , (~>)
     , infer
 
     -- * Check
@@ -233,6 +234,14 @@ eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
 -}
 always :: Property Bool Bool
 always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
+
+{-| @f `~>` g@ returns `True` if every `True` output of @f@ is eventually
+    followed by a `True` output from @g@
+-}
+(~>) :: Property a Bool -> Property a Bool -> Property a Bool
+f ~> g = always . (liftA2 (==>) f (eventually . g))
+  where
+    p ==> q = not p || q
 
 {-| Convert a `Property` into the equivalent list transformation
 

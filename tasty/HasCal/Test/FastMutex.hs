@@ -44,10 +44,10 @@ fastMutex n = check defaultOptions{ debug = True } coroutines property do
     coroutines :: Coroutine Global [Label]
     coroutines = for [ 1 .. n ] proc
 
-    property :: Property ([Label], Global) Bool
+    property :: Property (Global, [Label]) Bool
     property = arr predicate
       where
-        predicate (labels, _) = length (filter (== CriticalSection) labels) <= 1
+        predicate (_, labels) = length (filter (== CriticalSection) labels) <= 1
 
     proc :: Int -> Coroutine Global Label
     proc self = Begin{..}
