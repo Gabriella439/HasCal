@@ -68,7 +68,7 @@ module HasCal
     , choose
 
     -- * Classes
-    , ToDocs(..)
+    , Pretties(..)
 
     -- * Re-exports
     , module HasCal.Temporal
@@ -251,7 +251,7 @@ data Status global local = Status
     } deriving stock (Eq, Generic, Show)
       deriving anyclass (Hashable)
 
-instance (Pretty global, ToDocs local) => Pretty (Status global local) where
+instance (Pretty global, Pretties local) => Pretty (Status global local) where
     pretty Status{ _global, _local } = Pretty.group (Pretty.flatAlt long short)
       where
         short
@@ -279,7 +279,7 @@ instance (Pretty global, ToDocs local) => Pretty (Status global local) where
                     <>  Pretty.align (bullets localDocs)
                     )
 
-        localDocs = toDocs _local
+        localDocs = pretties _local
 
 -- | `Lens'` for accessing the `_global` state of a `Process`
 global :: Lens' (Status global local) global
@@ -323,7 +323,7 @@ local k (Status a b) = fmap (\b' -> Status a b') (k b)
 -}
 data Coroutine global label =
         forall local
-    .   (Eq local, Hashable local, ToDocs local, Show local)
+    .   (Eq local, Hashable local, Pretties local, Show local)
     =>  Begin
             { startingLabel :: label
             , startingLocal :: local
@@ -546,7 +546,7 @@ await = Monad.guard
 @
 -}
 assert
-    :: (ToDocs local, Pretty global, Show local, Show global)
+    :: (Pretties local, Pretty global, Show local, Show global)
     => Bool
     -- ^ Condition
     -> Process global local label ()
@@ -969,37 +969,37 @@ check
     internally represented as nested 2-tuples, which will look ugly when
     pretty-printed using the `Pretty` class
 -}
-class ToDocs a where
-    toDocs :: a -> [Doc ann]
-    default toDocs :: Pretty a => a -> [Doc ann]
-    toDocs a = [ pretty a ]
+class Pretties a where
+    pretties :: a -> [Doc ann]
+    default pretties :: Pretty a => a -> [Doc ann]
+    pretties a = [ pretty a ]
 
-instance ToDocs () where
-    toDocs () = []
+instance Pretties () where
+    pretties () = []
 
-instance (ToDocs a, ToDocs b) => ToDocs (a, b) where
-    toDocs (a, b) = toDocs a <> toDocs b
+instance (Pretties a, Pretties b) => Pretties (a, b) where
+    pretties (a, b) = pretties a <> pretties b
 
-instance ToDocs Bool
-instance ToDocs Char
-instance ToDocs Double
-instance ToDocs Float
-instance ToDocs Int
-instance ToDocs Int8
-instance ToDocs Int16
-instance ToDocs Int32
-instance ToDocs Int64
-instance ToDocs Integer
-instance ToDocs Natural
-instance ToDocs Word
-instance ToDocs Word8
-instance ToDocs Word16
-instance ToDocs Word32
-instance ToDocs Word64
-instance ToDocs Void
+instance Pretties Bool
+instance Pretties Char
+instance Pretties Double
+instance Pretties Float
+instance Pretties Int
+instance Pretties Int8
+instance Pretties Int16
+instance Pretties Int32
+instance Pretties Int64
+instance Pretties Integer
+instance Pretties Natural
+instance Pretties Word
+instance Pretties Word8
+instance Pretties Word16
+instance Pretties Word32
+instance Pretties Word64
+instance Pretties Void
 
-instance (Pretty key, Pretty value) => ToDocs (HashMap key value) where
-    toDocs m = fmap adapt (HashMap.toList m)
+instance (Pretty key, Pretty value) => Pretties (HashMap key value) where
+    pretties m = fmap adapt (HashMap.toList m)
       where
         adapt (key, value) = pretty key <> ": " <> pretty value
 
