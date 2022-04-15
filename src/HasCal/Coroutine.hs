@@ -250,11 +250,11 @@ instance (Pretty global, Pretties local) => Pretty (Status global local) where
 
         localDocs = pretties _local
 
--- | `Lens'` for accessing the `_global` state of a `Process`
+-- | A lens for accessing the `_global` state of a `Process`
 global :: Lens' (Status global local) global
 global k (Status a b) = fmap (\a' -> Status a' b) (k a)
 
--- | `Lens'` for accessing the `_local` state of a `Process`
+-- | A lens for accessing the `_local` state of a `Process`
 local :: Lens' (Status global local) local
 local k (Status a b) = fmap (\b' -> Status a b') (k b)
 
@@ -348,9 +348,9 @@ instance Monoid label => Monoid (Coroutine global label) where
     model checker behavior depends on whether you enable the `termination`
     check:
 
-    * If you enable the `termination` check then the model checker will `throw`
-      a `Nontermination` exception since revisiting the same state indicates a
-      simulation path that permits an infinite loop
+    * If you enable the `termination` check then the model checker will
+      `Exception.throw` a `Nontermination` exception since revisiting the same
+      state indicates a simulation path that permits an infinite loop
 
     * If you disable the `termination` check then the model checker will still
       end the current simulation branch since it has already visited this
@@ -620,9 +620,6 @@ data ModelException =
       =>  Nontermination { _history :: [(label, status)] }
           -- ^ The process does not necessarily terminate because at least one
           --   branch of execution permits an infinite cycle
-          --
-          --   NOTE: The `history` field stores old states in reverse
-          --   chronological order, for efficiency
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { _status :: local }
           -- The process failed to satisfy an `assert` statement
@@ -757,7 +754,7 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options{ termination = False, debug = False }
 
-{-| This type is used internally within the `check` function to keep track of
+{-| This type is used internally within the `model` function to keep track of
     state specific to one \"timeline\" of the model checker (i.e. one possible
     branch of execution)
 
@@ -770,7 +767,7 @@ data Timeline global local label status = Timeline
       -- ^ This is kept for error reporting so that if things go wrong we can
       --   report to the user what sequence of events led up to the problem
     , _historySet     :: !(HashSet (label, Status global local))
-      -- ^ This always the same as @`HashSet.fromList _history` `_history`@,
+      -- ^ This always the same as @`HashSet.fromList` _history@,
       --   but kept as a separate field for efficiently updating and querying
       --   which states we've seen so far in order to detect cycles
     , _propertyStatus :: !(HashSet status)
@@ -778,7 +775,7 @@ data Timeline global local label status = Timeline
     , _propertyHistory :: [(global, label)]
     }
 
--- | `Lens'` for accessing the `_processStatus` field of a `Timeline`
+-- | A lens for accessing the `_processStatus` field of a `Timeline`
 processStatus
     :: Lens' (Timeline global local label status) (Status global local)
 processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
