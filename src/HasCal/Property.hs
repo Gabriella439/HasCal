@@ -405,10 +405,8 @@ instance Profunctor Check where
 check :: Property input output -> Check input output
 check (Property s k) = Check s k'
   where
-    -- TODO: Memoize this function
     relation a = HashMap.fromListWith (<>) (fmap adapt universe)
       where
-        -- TODO: Deduplicate [(b, old)]
         adapt old = (new, [(b, old)])
           where
             (b, new) = State.runState (k a) old
