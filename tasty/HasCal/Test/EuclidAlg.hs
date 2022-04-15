@@ -47,9 +47,8 @@ euclidAlg n = do
             finalV <- use (global.v)
             assert (Just finalV == gcd initialU initialV)
             assert (finalV == Prelude.gcd initialU initialV)
-            end
 
-    check defaultOptions{ debug = True, termination = True } Begin{..} do
+    check defaultOptions{ debug = True, termination = True } Begin{..} (pure True) do
         _v <- fromList [ 1 .. n ]
         let _u = initialU
         return Global{..}
