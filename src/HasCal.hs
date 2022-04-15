@@ -657,24 +657,27 @@ data ModelException =
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { _status :: local }
           -- The process failed to satisfy an `assert` statement
-    |     PropertyFailure
-          -- TODO: Provide more details
+    |     forall global label
+      .   (Pretty global, Pretty label, Show global, Show label)
+      =>  PropertyFailed { _propertyHistory :: [(global, label)] }
     |     Failure { _message :: Text }
           -- ^ Used by the `fail` method
 
 instance Show ModelException where
     showsPrec _ Nontermination{ _history } =
-          showString "Nontermination {history = "
+          showString "Nontermination {_history = "
         . Show.showListWith shows _history
         . showString "}"
     showsPrec _ AssertionFailed{ _status } =
-          showString "AssertionFailed {status = "
+          showString "AssertionFailed {_status = "
         . shows _status
         . showString "}"
-    showsPrec _ PropertyFailure =
-          showString "PropertyFailure"
+    showsPrec _ PropertyFailed{ _propertyHistory } =
+          showString "PropertyFailed {_propertyHistory = "
+        . shows _propertyHistory
+        . showString "}"
     showsPrec _ Failure{ _message } =
-          showString "Failure {message = "
+          showString "Failure {_message = "
         . shows _message
         . showString "}"
 
@@ -730,7 +733,42 @@ instance Pretty ModelException where
             <>  pretty _status
             )
 
-    pretty PropertyFailure = "Property failure"
+    pretty PropertyFailed{ _propertyHistory } =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        short = "Property failed" <> suffix
+          where
+            suffix = case _propertyHistory of
+                [] ->
+                    mempty
+
+                seens  ->
+                    " - History: " <> bars (map adapt (reverse seens))
+                  where
+                    adapt (_global, label) =
+                        commas [ pretty label, pretty _global ]
+
+        long = Pretty.align ("Property failed" <> suffix)
+          where
+            suffix = case _propertyHistory of
+                [] -> mempty
+                seens ->
+                        Pretty.hardline
+                    <>  Pretty.hardline
+                    <>  "History:"
+                    <>  Pretty.hardline
+                    <>  foldMap outer (reverse seens)
+                  where
+                    outer (_global, label) =
+                            "- "
+                        <>  Pretty.align
+                            (   "Label: "
+                            <>  pretty label
+                            <>  Pretty.hardline
+                            <>  "State: "
+                            <>  pretty _global
+                            )
+                        <>  Pretty.hardline
 
     pretty Failure{ _message } = "Failure: " <> pretty _message
 
@@ -759,7 +797,7 @@ defaultOptions = Options{ termination = False, debug = False }
 data Timeline global local label status = Timeline
     { _processStatus  :: !(Status global local)
       -- ^ This stores the internal state of the `Process`
-    , _history        :: ![(label, Status global local)]
+    , _history        :: [(label, Status global local)]
       -- ^ This is kept for error reporting so that if things go wrong we can
       --   report to the user what sequence of events led up to the problem
     , _historySet     :: !(HashSet (label, Status global local))
@@ -768,12 +806,7 @@ data Timeline global local label status = Timeline
       --   which states we've seen so far in order to detect cycles
     , _propertyStatus :: !(HashSet status)
       -- ^ This stores the internal state of the temporal `Property`
-    , _initial        :: !Bool
-      -- ^ This is only set to `True` for the very first step of our
-      --   model-checking `Timeline`, because that's the only step where we
-      --   need to check if the temporal `Property` emits `True`.  For all
-      --   other steps we set this to `False` and consequently don't check the
-      --   output of the temporal `Property`
+    , _propertyHistory :: [(global, label)]
     }
 
 -- | `Lens'` for accessing the `_processStatus` field of a `Timeline`
@@ -812,7 +845,7 @@ check
     property
     startingGlobals =
     case Temporal.check property of
-        Check expectedFinalState stepProperty ->
+        Check finalPropertyStatus stepProperty ->
             handler
                 (State.evalStateT
                     (List.runListT (State.evalStateT action uninitializedTimeline))
@@ -823,8 +856,6 @@ check
                 error "Internal error - Uninitialized timeline"
 
             action = do
-                let startingPropertyStatus = HashSet.fromList universe
-
                 startingGlobal <- lift (List.select startingGlobals)
 
                 let startingProcessStatus = Status
@@ -832,14 +863,31 @@ check
                         , _local  = startingLocal
                         }
 
+                let startingPropertyInput = (startingGlobal, startingLabel)
+
+                let _propertyHistory = [ startingPropertyInput ]
+
+                let _propertyStatus = HashSet.fromList do
+                        s <- universe
+
+                        -- The temporal `Property` only needs to return `True`
+                        -- for the first output, indicating that the property
+                        -- holds for the entire sequence
+                        (True, s') <- State.Lazy.runStateT (stepProperty startingPropertyInput) s
+
+                        return s'
+
+                Monad.when (HashSet.null _propertyStatus) do
+                    liftIO (Exception.throw PropertyFailed{ _propertyHistory })
+
                 let historyKey = (startingLabel, startingProcessStatus)
 
                 put $! Timeline
-                    { _processStatus  = startingProcessStatus
-                    , _history        = [ historyKey ]
-                    , _historySet     = HashSet.singleton historyKey
-                    , _propertyStatus = startingPropertyStatus
-                    , _initial        = True
+                    { _processStatus   = startingProcessStatus
+                    , _history         = [ historyKey ]
+                    , _historySet      = HashSet.singleton historyKey
+                    , _propertyStatus
+                    , _propertyHistory
                     }
 
                 loop process
@@ -851,24 +899,26 @@ check
 
                 case step of
                     Done () -> do
-                        Timeline{ _propertyStatus } <- get
+                        Timeline{ _propertyStatus, _propertyHistory } <- get
 
-                        Monad.unless (HashSet.member expectedFinalState _propertyStatus) do
-                            liftIO (Exception.throw PropertyFailure)
+                        Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
+                            liftIO (Exception.throw PropertyFailed{ _propertyHistory })
 
                     Yield label rest -> do
-                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _initial } <- get
+                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _propertyHistory } <- get
 
                         let Status{ _global } = _processStatus
+
+                        let propertyInput = (_global, label)
 
                         let newPropertyStatus = HashSet.fromList do
                                 s <- HashSet.toList _propertyStatus
 
-                                (bool, s') <- State.Lazy.runStateT (stepProperty (_global, label)) s
-
-                                Monad.guard (_initial ==> bool)
-
-                                return s'
+                                -- We're uninterested in the output of the
+                                -- temporal `Property` for subsequent outputs
+                                -- because we don't care if the temporal
+                                -- `Property` holds for a suffix of the behavior
+                                State.Lazy.execStateT (stepProperty propertyInput) s
 
                         let seenKey = (label, _processStatus, newPropertyStatus)
 
@@ -876,8 +926,11 @@ check
 
                         let newHistory = historyKey : _history
 
+                        let newPropertyHistory =
+                                propertyInput : _propertyHistory
+
                         Monad.when (HashSet.null newPropertyStatus) do
-                            liftIO (Exception.throw PropertyFailure)
+                            liftIO (Exception.throw PropertyFailed{ _propertyHistory })
 
                         seen <- lift get
 
@@ -893,7 +946,7 @@ check
                             , _history = newHistory
                             , _historySet = HashSet.insert historyKey _historySet
                             , _propertyStatus = newPropertyStatus
-                            , _initial = False
+                            , _propertyHistory = newPropertyHistory
                             }
 
                         loop rest
@@ -960,4 +1013,4 @@ bars :: [Doc ann] -> Doc ann
 bars docs = docs `sepBy` " | "
 
 bullets :: [Doc ann] -> Doc ann
-bullets docs = map ("• " <>) docs `sepBy` Pretty.hardline
+bullets docs = map ("- " <>) docs `sepBy` Pretty.hardline
