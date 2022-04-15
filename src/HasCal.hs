@@ -48,7 +48,6 @@ module HasCal
     -- * PlusCal Statements
     , yield
     , skip
-    , end
     , either
     , with
     , while
@@ -77,7 +76,6 @@ module HasCal
     , Generic
     , HashMap
     , NonEmpty(..)
-    , Void
     , Alternative(..)
     , Hashable
     , MonadIO(..)
@@ -93,9 +91,9 @@ import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState(..), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
-import Data.Hashable (Hashable(..))
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
+import Data.Hashable (Hashable(..))
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
@@ -113,14 +111,13 @@ import Prettyprinter (Doc, Pretty(..))
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
-import qualified Control.Monad.State.Strict as State
 import qualified Control.Monad.State.Lazy as State.Lazy
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
 import qualified Data.Text as Text
-import qualified Data.Void as Void
 import qualified HasCal.Temporal as Temporal
 import qualified List.Transformer as List
 import qualified Prelude
@@ -185,8 +182,7 @@ hoistStep _    List.Nil        = List.Nil
     * (`<>`) - Run two `Process`es sequentially and combine their return values
 
     Finally, you will need to convert a `Process` into a `Coroutine` by wrapping
-    the `Process` in the `Begin` constructor.  Note that the process needs to
-    terminate (e.g. using `empty` / `end`) in order to become a `Coroutine`.
+    the `Process` in the `Begin` constructor
 -}
 newtype Process global local label result
     = Choice
@@ -331,7 +327,7 @@ data Coroutine global label =
     =>  Begin
             { startingLabel :: label
             , startingLocal :: local
-            , process       :: Process global local label Void
+            , process       :: Process global local label ()
             }
 
 instance Functor (Coroutine global) where
@@ -387,8 +383,8 @@ instance Monoid label => Monoid (Coroutine global label) where
       a `Nontermination` exception since revisiting the same state indicates a
       simulation path that permits an infinite loop
 
-    * If you disable the `termination` check then the model checker will
-      `end` the current simulation branch since it has already visited this
+    * If you disable the `termination` check then the model checker will still
+      end the current simulation branch since it has already visited this
       state before
 
 -}
@@ -431,19 +427,6 @@ example = do
 skip :: Process global local label ()
 skip = mempty
 
-{-| Terminate the current `Process`, which slightly resembles the @end process@
-    keyword in PlusCal
-
-    This is a synonym for `empty`, but with a `Process`-specific type signature.
-
-    Note that this does not behave exactly the same as @end process@ in PlusCal.
-    This is closer in spirit to @`await` `False`@, meaning that you can call
-    `end` anywhere within a `Process` and that will stop execution for the
-    current process branch.
--}
-end :: Process global local label a
-end = empty
-
 {-| Non-deterministically simulate multiple subroutines, like an @either@
     statement in PlusCal
 
@@ -466,7 +449,7 @@ end = empty
     … which implies that:
 
 @
-`either` [] = `end`
+`either` [] = `empty`
 
 `either` [ a, b ] = a `<|>` b
 @
@@ -501,7 +484,7 @@ either = Foldable.asum
     … which implies that:
 
 @
-`with` [] = `end`
+`with` [] = `empty`
 @
 
 -}
@@ -538,7 +521,7 @@ while condition body = do
     signature.
 
 @
-`await` `False` = `end`
+`await` `False` = `empty`
 `await` `True`  = `skip`
 
 `await` (a `||` b) = `await` a <|> `await` b
@@ -867,8 +850,11 @@ check
                 step <- zoom processStatus (State.mapStateT (hoistListT lift) steps)
 
                 case step of
-                    Done void -> do
-                        Void.absurd void
+                    Done () -> do
+                        Timeline{ _propertyStatus } <- get
+
+                        Monad.unless (HashSet.member expectedFinalState _propertyStatus) do
+                            liftIO (Exception.throw PropertyFailure)
 
                     Yield label rest -> do
                         Timeline{ _processStatus, _history, _historySet, _propertyStatus, _initial } <- get
