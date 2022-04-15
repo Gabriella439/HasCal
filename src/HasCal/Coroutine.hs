@@ -625,9 +625,20 @@ data ModelException =
           -- The process failed to satisfy an `assert` statement
     |     forall global label
       .   (Pretty global, Pretty label, Show global, Show label)
-      =>  PropertyFailed { _propertyHistory :: [(global, label)] }
+      =>  PropertyFailed
+               { _propertyHistory :: [(global, label)]
+               , _reason :: PropertyFailedReason
+               }
+          -- At least one branch of execution failed to satisfy the specified
+          -- `Property`
     |     Failure { _message :: Text }
           -- ^ Used by the `fail` method
+
+-- | The reason why a `PropertyFailed` exception was thrown
+data PropertyFailedReason
+    = Unsatisfiable
+    | UnsatisfyingConclusion
+    deriving (Show)
 
 instance Show ModelException where
     showsPrec _ Nontermination{ _history } =
@@ -638,9 +649,11 @@ instance Show ModelException where
           showString "AssertionFailed {_status = "
         . shows _status
         . showString "}"
-    showsPrec _ PropertyFailed{ _propertyHistory } =
+    showsPrec _ PropertyFailed{ _propertyHistory, _reason } =
           showString "PropertyFailed {_propertyHistory = "
         . shows _propertyHistory
+        . showString ", _reason = "
+        . shows _reason
         . showString "}"
     showsPrec _ Failure{ _message } =
           showString "Failure {_message = "
@@ -699,10 +712,14 @@ instance Pretty ModelException where
             <>  pretty _status
             )
 
-    pretty PropertyFailed{ _propertyHistory } =
+    pretty PropertyFailed{ _propertyHistory, _reason } =
         Pretty.group (Pretty.flatAlt long short)
       where
-        short = "Property failed" <> suffix
+        reason = case _reason of
+            Unsatisfiable          -> "unsatisfiable"
+            UnsatisfyingConclusion -> "unsatisfying conclusion"
+
+        short = "Property failed: " <> reason <> suffix
           where
             suffix = case _propertyHistory of
                 [] ->
@@ -714,7 +731,7 @@ instance Pretty ModelException where
                     adapt (_global, label) =
                         commas [ pretty label, pretty _global ]
 
-        long = Pretty.align ("Property failed" <> suffix)
+        long = Pretty.align ("Property failed: " <> reason <> suffix)
           where
             suffix = case _propertyHistory of
                 [] -> mempty
@@ -844,7 +861,9 @@ model
                         return s'
 
                 Monad.when (HashSet.null _propertyStatus) do
-                    liftIO (Exception.throw PropertyFailed{ _propertyHistory })
+                    let _reason = Unsatisfiable
+
+                    liftIO (Exception.throw PropertyFailed{ _propertyHistory, _reason })
 
                 let historyKey = (startingLabel, startingProcessStatus)
 
@@ -868,9 +887,9 @@ model
                         Timeline{ _propertyStatus, _propertyHistory } <- get
 
                         Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
-                            -- TODO: Perhaps add a detail indicating that we
-                            -- reached the end of the sequence
-                            liftIO (Exception.throw PropertyFailed{ _propertyHistory })
+                            let _reason = UnsatisfyingConclusion
+
+                            liftIO (Exception.throw PropertyFailed{ _propertyHistory, _reason })
 
                     Yield label rest -> do
                         Timeline{ _processStatus, _history, _historySet, _propertyStatus, _propertyHistory } <- get
@@ -898,7 +917,8 @@ model
                                 propertyInput : _propertyHistory
 
                         Monad.when (HashSet.null newPropertyStatus) do
-                            liftIO (Exception.throw PropertyFailed{ _propertyHistory = newPropertyHistory })
+                            let _reason = Unsatisfiable
+                            liftIO (Exception.throw PropertyFailed{ _propertyHistory = newPropertyHistory, _reason })
 
                         seen <- lift get
 
