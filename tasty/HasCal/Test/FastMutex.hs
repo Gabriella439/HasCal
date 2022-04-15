@@ -35,7 +35,7 @@ instance Pretty Label where
     pretty = unsafeViaShow
 
 fastMutex :: Int -> IO ()
-fastMutex n = check defaultOptions{ debug = True } coroutines property do
+fastMutex n = model defaultOptions{ debug = True } coroutines property do
     let _x = 0
     let _y = 0
     let _b = [ 1.. n ] |-> \_i -> False

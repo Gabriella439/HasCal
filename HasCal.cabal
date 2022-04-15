@@ -11,6 +11,7 @@ copyright:          2021 Gabriella Gonzalez
 
 library
     exposed-modules:  HasCal
+                    , HasCal.Coroutine
                     , HasCal.Temporal
     build-depends:    base >=4.14.3.0 && < 5
                     , exceptions
