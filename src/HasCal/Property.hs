@@ -71,7 +71,7 @@ import qualified Data.HashMap.Strict       as HashMap
 
     * (`.`) - You can compose two `Property`s end-to-end, feeding the @output@
       of one property as the @input@ to another `Property`
-    * `Applicative` operations (or `do` notation if you enable @ApplicativeDo@)
+    * `Applicative` operations (or @do@ notation if you enable @ApplicativeDo@)
       - this shares their @input@ and combines their @output@s pointwise
     * (`<>`) - This combines their @output@s pointwise using (`<>`)
     * Numeric operators - These operators combine their @output@s pointwise
@@ -208,7 +208,8 @@ data Pair a b = Pair !a !b
     this class directly
 
     For most types, the easiest way to implement `Universe` is to
-    @derive (`Bounded`, `Enum`, `Universe`)@
+    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the `DeriveAnyClass`
+    extension
 -}
 class Universe a where
     universe :: [a]
