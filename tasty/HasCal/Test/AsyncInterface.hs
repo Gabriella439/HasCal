@@ -64,10 +64,7 @@ instance Pretty Label where
   pretty = unsafeViaShow
 
 data Data = D1 | D2
-  deriving (Eq, Generic, Hashable, Show)
-
-instance Universe Data where
-  universe = [D1, D2]
+  deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
 
 instance QC.Arbitrary Data where
   arbitrary = QC.elements universe
