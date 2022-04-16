@@ -101,7 +101,7 @@ init = do
 
 next :: Universe d => Process (Global d) () Label ()
 next =
-  while (pure True) do
+  forever do
     either
       [ existsU send
       , rcv
