@@ -107,19 +107,19 @@ next =
 
 send :: d -> Process (Global d) () (Label d) ()
 send d = do
-  yield (Send d)
   _rdy <- use (global.chan.rdy)
   _ack <- use (global.chan.ack)
   await (_rdy == _ack)
+  yield (Send d)
   global.chan.val .= d
   global.chan.rdy %= not
 
 rcv :: Process (Global d) () (Label d) ()
 rcv = do
-  yield Rcv
   _rdy <- use (global.chan.rdy)
   _ack <- use (global.chan.ack)
   await (_rdy /= _ack)
+  yield Rcv
   global.chan.ack %= not
 
 test_asyncInterface :: TestTree
