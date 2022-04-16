@@ -57,7 +57,7 @@ makeLenses ''Global
 instance Show d => Pretty (Chan d) where
   pretty = unsafeViaShow
 
-data Label = Init | Send | Rcv
+data Label d = Init | Send d | Rcv
   deriving (Eq, Generic, Hashable, Show)
 
 instance Pretty Label where
