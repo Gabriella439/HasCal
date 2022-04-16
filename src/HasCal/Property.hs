@@ -292,7 +292,7 @@ infer (Property s k) as =
     Other than the difference in algorithmic complexity, the `Check` type is
     similar to the `Property` type, meaning that they both share the same type
     parameters and the same instances.  However, you generally should prefer to
-    use the instance for the `Property` type because those are more efficient.
+    use the instances for the `Property` type because those are more efficient.
 
     The main difference between `Property` and `Check`  is that the `Property`
     type is abstract, whereas the `Check` type is not  That means that you can
@@ -418,8 +418,9 @@ check (Property s k) = Check s k'
 
     You can think of `checkList` as having the following definition:
 
-    > checkList property pairs =
-    >     infer property (map fst pairs) == map snd pairs
+    > checkList property pairs = infer property inputs == outputs
+    >   where
+    >     (inputs, outputs) = unzip pairs
 
     … except that `checkList` processes the list in a single forward pass
     (unlike `infer`)
