@@ -20,6 +20,7 @@ module HasCal.Property
     (
     -- * Property
       Property
+    , prime
     , eventually
     , always
     , (~>)
@@ -43,10 +44,10 @@ import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
 import Prelude hiding (id, (.))
 
-import qualified Control.Monad             as Monad
+import qualified Control.Monad as Monad
 import qualified Control.Monad.Trans.State as State
-import qualified Data.HashSet              as HashSet
-import qualified Data.HashMap.Strict       as HashMap
+import qualified Data.HashSet as HashSet
+import qualified Data.HashMap.Strict as HashMap
 
 {-| A temporal `Property` is a stateful transformation from an @input@ to an
     @output@
@@ -224,6 +225,36 @@ instance (Universe a, Universe b) => Universe (Pair a b) where
 
 instance Universe Bool where
     universe = [ False, True ]
+
+data Prime a = Zero | One !a | Two !a !a
+    deriving (Eq, Generic, Hashable)
+
+instance Universe a => Universe (Prime a) where
+    universe = Zero : fmap One universe <> liftA2 Two universe universe
+
+{-| This property outputs each element with the following element (or `Nothing`
+    if there is no following element)
+
+    This is called \"prime\" as a reference to the TLA+ convention of referring
+    to the next value of @x@ using @x'@ (i.e. \"@x@ prime\")
+
+    >>> infer prime [ False, True, True ]
+    [Just (False,True),Just (True,True),Nothing]
+
+    >>> let { alternate Nothing = True; alternate (Just (x, y)) = x /= y }
+    >>> infer (always . arr alternate . prime) [ False, False, True, False ]
+    [False,True,True,True]
+
+
+-}
+prime :: (Eq a, Hashable a, Universe a) => Property a (Maybe (a, a))
+prime = Property Zero step
+  where
+    step a0 = State.state f
+      where
+        f  Zero      = (Nothing, One a0)
+        f (One a1  ) = (Just (a0, a1), Two a0 a1)
+        f (Two a1 _) = (Just (a0, a1), Two a0 a1)
 
 {-| This property outputs `True` if the current input or any future input is
     `True`, and outputs `False` otherwise
