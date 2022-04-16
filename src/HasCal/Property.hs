@@ -434,15 +434,15 @@ checkList temporal =
           where
             loop states [] =
                 HashSet.member finalState states
-            loop states ((a, bool) : pairs)
+            loop states ((input, output) : pairs)
                 | HashSet.null states = False
                 | otherwise           = loop newStates pairs
               where
                 newStates = HashSet.fromList do
                     state <- HashSet.toList states
 
-                    (b, newState) <- State.runStateT (k a) state
+                    (output', newState) <- State.runStateT (k input) state
 
-                    Monad.guard (b == bool)
+                    Monad.guard (output == output')
 
                     return newState
