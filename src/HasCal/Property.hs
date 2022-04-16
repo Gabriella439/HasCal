@@ -32,9 +32,6 @@ module HasCal.Property
 
     -- * Universe
     , Universe(..)
-
-    -- * Re-exports
-    , Arrow(..)
     ) where
 
 import Control.Applicative (liftA2)
