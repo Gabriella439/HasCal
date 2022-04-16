@@ -204,7 +204,11 @@ data Pair a b = Pair !a !b
 
     Note that `universe` should be the same thing as
     @[ `minBound` .. `maxBound` ]@ for a type that implements `Bounded` and
-    `Enum`, but it's easier to define instances of this class directly
+    `Enum`, but sometimes it's easier or more efficient to define instances of
+    this class directly
+
+    For most types, the easiest way to implement `Universe` is to
+    @derive (`Bounded`, `Enum`, `Universe`)@
 -}
 class Universe a where
     universe :: [a]
