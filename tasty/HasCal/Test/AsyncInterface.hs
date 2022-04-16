@@ -112,7 +112,9 @@ next =
 send :: d -> Process (Global d) () Label ()
 send d = do
   yield Send
-  await =<< (==) <$> use (global.chan.rdy) <*> use (global.chan.ack)
+  _rdy <- use (global.chan.rdy)
+  _ack <- use (global.chan.ack)
+  await (_rdy == _ack)
   global.chan.val .= d
   global.chan.rdy %= not
 
