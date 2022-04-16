@@ -70,12 +70,12 @@ instance QC.Arbitrary Data where
   arbitrary = QC.elements universe
 
 asyncInterface :: Data -> Bool -> Bool -> IO ()
-asyncInterface val0 rdy0 ack0 =
+asyncInterface =
   model defaultOptions{ debug = True, termination = False }
         coroutine property do
-    let _val = val0
-    let _rdy = rdy0
-    let _ack = ack0
+    _val <- fromList universe
+    _rdy <- fromList universe
+    _ack <- fromList universe
     let _chan = Chan{..}
     return Global{..}
   where
