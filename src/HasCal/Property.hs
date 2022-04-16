@@ -20,10 +20,11 @@ module HasCal.Property
     (
     -- * Property
       Property
-    , prime
     , eventually
     , always
     , (~>)
+    , prime
+    , following
     , infer
 
     -- * Check
@@ -232,30 +233,6 @@ data Prime a = Zero | One !a | Two !a !a
 instance Universe a => Universe (Prime a) where
     universe = Zero : fmap One universe <> liftA2 Two universe universe
 
-{-| This property outputs each element with the following element (or `Nothing`
-    if there is no following element)
-
-    This is called \"prime\" as a reference to the TLA+ convention of referring
-    to the next value of @x@ using @x'@ (i.e. \"@x@ prime\")
-
-    >>> infer prime [ False, True, True ]
-    [Just (False,True),Just (True,True),Nothing]
-
-    >>> let { alternate Nothing = True; alternate (Just (x, y)) = x /= y }
-    >>> infer (always . arr alternate . prime) [ False, False, True, False ]
-    [False,True,True,True]
-
-
--}
-prime :: (Eq a, Hashable a, Universe a) => Property a (Maybe (a, a))
-prime = Property Zero step
-  where
-    step a0 = State.state f
-      where
-        f  Zero      = (Nothing, One a0)
-        f (One a1  ) = (Just (a0, a1), Two a0 a1)
-        f (Two a1 _) = (Just (a0, a1), Two a0 a1)
-
 {-| This property outputs `True` if the current input or any future input is
     `True`, and outputs `False` otherwise
 -}
@@ -270,11 +247,45 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
 
 {-| @f `~>` g@ returns `True` if every `True` output of @f@ is eventually
     followed by a `True` output from @g@
+
+    > f ~> g = always . (liftA2 (==>) f (eventually . g))
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
   where
     p ==> q = not p || q
+
+{-| This property outputs each element with the following element (or `Nothing`
+    if there is no following element)
+
+    This is called \"prime\" as a reference to the TLA+ convention of referring
+    to the next value of @x@ using @x'@ (i.e. \"@x@ prime\")
+
+    >>> infer prime [ False, True, True ]
+    [Just (False,True),Just (True,True),Nothing]
+-}
+prime :: (Eq a, Hashable a, Universe a) => Property a (Maybe (a, a))
+prime = Property Zero step
+  where
+    step a0 = State.state f
+      where
+        f  Zero      = (Nothing, One a0)
+        f (One a1  ) = (Just (a0, a1), Two a0 a1)
+        f (Two a1 _) = (Just (a0, a1), Two a0 a1)
+
+{-| This is a more ergonomic version of `prime` for the common case where you
+    want to compare each temporal input against the next input using an
+    equivalence relation
+
+    >>> infer (following (/=)) [ False, False, True, False ]
+    [False,True,True,True]
+-}
+following
+    :: (Eq a, Hashable a, Universe a) => (a -> a -> Bool) -> Property a Bool
+following (?) = arr adapt . prime
+  where
+    adapt  Nothing      = True
+    adapt (Just (x, y)) = x ? y
 
 {-| Convert a `Property` into the equivalent list transformation
 
