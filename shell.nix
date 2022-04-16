@@ -6,9 +6,9 @@ let
 
   f = { mkDerivation, base, exceptions, hashable, lib
       , list-transformer, microlens-platform, mtl, prettyprinter
-      , profunctors, safe-exceptions, tasty, tasty-discover
-      , tasty-expected-failure, tasty-hunit, text, transformers
-      , unordered-containers
+      , profunctors, QuickCheck, safe-exceptions, tasty, tasty-discover
+      , tasty-expected-failure, tasty-hunit, tasty-quickcheck, text
+      , transformers, unordered-containers
       }:
       mkDerivation {
         pname = "HasCal";
@@ -20,7 +20,8 @@ let
           unordered-containers
         ];
         testHaskellDepends = [
-          base tasty tasty-discover tasty-expected-failure tasty-hunit
+          base QuickCheck tasty tasty-discover tasty-expected-failure tasty-hunit
+          tasty-quickcheck
         ];
         testToolDepends = [ tasty-discover ];
         description = "Haskell embedding of PlusCal";

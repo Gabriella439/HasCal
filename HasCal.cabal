@@ -34,11 +34,14 @@ test-suite tasty
     main-is:          Main.hs
     build-depends:    base >=4.14.3.0 && < 5
                     , HasCal
+                    , QuickCheck
                     , tasty
                     , tasty-expected-failure
                     , tasty-hunit
                     , tasty-discover
-    other-modules:    HasCal.Test.EuclidAlg
+                    , tasty-quickcheck
+    other-modules:    HasCal.Test.AsyncInterface
+                    , HasCal.Test.EuclidAlg
                     , HasCal.Test.FastMutex
     hs-source-dirs:   tasty
     ghc-options:      -Wall

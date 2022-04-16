@@ -35,7 +35,8 @@ instance Pretty Label where
     pretty = unsafeViaShow
 
 fastMutex :: Int -> IO ()
-fastMutex n = model defaultOptions{ debug = True } coroutines property do
+fastMutex n = model defaultOptions{ debug = True, termination = False }
+                    coroutines property do
     let _x = 0
     let _y = 0
     let _b = [ 1.. n ] |-> \_i -> False
@@ -113,6 +114,6 @@ fastMutex n = model defaultOptions{ debug = True } coroutines property do
 
             ncs
 
-test_fastMutex:: TestTree
+test_fastMutex :: TestTree
 test_fastMutex = HUnit.testCase "Fast mutex algorithm" do
     fastMutex 3
