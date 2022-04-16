@@ -33,10 +33,9 @@ module HasCal.Test.AsyncInterface where
 
 import HasCal
 import Prelude hiding (either, init)
-import qualified Test.QuickCheck as QC
-import qualified Test.QuickCheck.Monadic as QC
 import Test.Tasty (TestTree)
-import qualified Test.Tasty.QuickCheck as TastyQC
+import qualified Test.Tasty.HUnit as HUnit
+import qualified Control.Monad as Monad
 
 data Global d = Global { _chan :: Chan d }
   deriving (Eq, Generic, Hashable, Show)
@@ -60,16 +59,13 @@ instance Show d => Pretty (Chan d) where
 data Label d = Init | Send d | Rcv
   deriving (Eq, Generic, Hashable, Show)
 
-instance Pretty Label where
+instance Show d => Pretty (Label d) where
   pretty = unsafeViaShow
 
 data Data = D1 | D2
   deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
 
-instance QC.Arbitrary Data where
-  arbitrary = QC.elements universe
-
-asyncInterface :: Data -> Bool -> Bool -> IO ()
+asyncInterface :: IO ()
 asyncInterface =
   model defaultOptions{ debug = True, termination = False }
         coroutine property do
@@ -79,7 +75,7 @@ asyncInterface =
     let _chan = Chan{..}
     return Global{..}
   where
-    coroutine :: Coroutine (Global Data) Label
+    coroutine :: Coroutine (Global Data) (Label Data)
     coroutine = Begin{..}
       where
         startingLabel = Init
@@ -88,20 +84,20 @@ asyncInterface =
 
         process = init
 
-    property :: Property (Global Data, Label) Bool
+    property :: Property (Global Data, Label Data) Bool
     property = arr predicate
       where
         predicate (_global, _label) = True
 
-init :: Universe d => Process (Global d) () Label ()
+init :: Universe d => Process (Global d) () (Label d) ()
 init = do
   yield Init
   global.chan.ack <~ use (global.chan.rdy)
   next
 
-next :: Universe d => Process (Global d) () Label ()
+next :: Universe d => Process (Global d) () (Label d) ()
 next =
-  forever do
+  Monad.forever do
     either
       [ existsU send
       , rcv
@@ -109,22 +105,23 @@ next =
   where
     existsU p = either (map p universe)
 
-send :: d -> Process (Global d) () Label ()
+send :: d -> Process (Global d) () (Label d) ()
 send d = do
-  yield Send
+  yield (Send d)
   _rdy <- use (global.chan.rdy)
   _ack <- use (global.chan.ack)
   await (_rdy == _ack)
   global.chan.val .= d
   global.chan.rdy %= not
 
-rcv :: Process (Global d) () Label ()
+rcv :: Process (Global d) () (Label d) ()
 rcv = do
   yield Rcv
-  await =<< (/=) <$> use (global.chan.rdy) <*> use (global.chan.ack)
+  _rdy <- use (global.chan.rdy)
+  _ack <- use (global.chan.ack)
+  await (_rdy /= _ack)
   global.chan.ack %= not
 
 test_asyncInterface :: TestTree
-test_asyncInterface = TastyQC.testProperty "Async interface" $
-  QC.forAll QC.arbitrary $ \(d, rdy0, ack0) ->
-    QC.monadicIO (QC.run (asyncInterface d rdy0 ack0))
+test_asyncInterface = HUnit.testCase "Async interface" do
+    asyncInterface
