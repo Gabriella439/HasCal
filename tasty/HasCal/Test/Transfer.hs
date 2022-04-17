@@ -63,9 +63,7 @@ test_transfer =
     Failure.expectFailBecause "The example has a deliberate TOCTOU bug" do
         HUnit.testCase "Transfer" do
             model defaultModel
-                { debug = True
-
-                , startingGlobals = do
+                { startingGlobals = do
                     let _alice_account = 10
                     let _bob_account   = 10
                     let _account_total = _alice_account + _bob_account

@@ -42,6 +42,7 @@ test-suite tasty
                     , HasCal.Test.EuclidAlg
                     , HasCal.Test.Flags
                     , HasCal.Test.FastMutex
+                    , HasCal.Test.Hanoi
                     , HasCal.Test.Trade
                     , HasCal.Test.Transfer
     hs-source-dirs:   tasty
