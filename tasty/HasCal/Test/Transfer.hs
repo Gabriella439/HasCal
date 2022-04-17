@@ -27,6 +27,8 @@
 > end algorithm *)
 >
 > MoneyInvariant == alice_account + bob_account = account_total
+>
+> ====
 
 -}
 module HasCal.Test.Transfer where
