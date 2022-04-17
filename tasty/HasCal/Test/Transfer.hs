@@ -36,6 +36,7 @@ import HasCal
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
+import qualified Test.Tasty.ExpectedFailure as Failure
 
 data Global = Global
     { _alice_account :: Int
@@ -56,8 +57,10 @@ makeLenses ''Global
 makeLenses ''Local
 
 test_transfer :: TestTree
-test_transfer = HUnit.testCase "Transfer" do
-    model defaultOptions coroutine property initial
+test_transfer =
+    Failure.expectFailBecause "The example has a deliberate TOCTOU bug" do
+        HUnit.testCase "Transfer" do
+            model defaultOptions coroutine property initial
   where
     initial :: [Global]
     initial = do

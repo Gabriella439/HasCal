@@ -41,6 +41,8 @@ test-suite tasty
     other-modules:    HasCal.Test.AsyncInterface
                     , HasCal.Test.EuclidAlg
                     , HasCal.Test.FastMutex
+                    , HasCal.Test.Trade
+                    , HasCal.Test.Transfer
     hs-source-dirs:   tasty
     ghc-options:      -Wall
     default-language: Haskell2010
