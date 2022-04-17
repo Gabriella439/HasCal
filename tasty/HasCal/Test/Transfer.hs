@@ -74,7 +74,6 @@ test_readme = HUnit.testCase "README" do
       where
         startingLabel = Transfer
 
-        -- TODO: Support a range
         startingLocals = do
             _money <- [ 1 .. 20 ]
             return Local{..}
