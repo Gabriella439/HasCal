@@ -34,6 +34,7 @@ MoneyInvariant == alice_account + bob_account = account_total
 
 ```haskell
 import Control.Monad (when)
+import Prelude hiding ((.))
 import HasCal
 
 data Global = Global

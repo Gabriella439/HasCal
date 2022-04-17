@@ -34,6 +34,7 @@ test-suite tasty
     main-is:          Main.hs
     build-depends:    base >=4.14.3.0 && < 5
                     , HasCal
+                    , containers
                     , tasty
                     , tasty-expected-failure
                     , tasty-hunit
@@ -43,6 +44,7 @@ test-suite tasty
                     , HasCal.Test.Flags
                     , HasCal.Test.FastMutex
                     , HasCal.Test.Hanoi
+                    , HasCal.Test.Market
                     , HasCal.Test.Trade
                     , HasCal.Test.Transfer
     hs-source-dirs:   tasty

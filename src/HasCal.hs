@@ -47,11 +47,13 @@ module HasCal
     , MonadIO(..)
     , Pretty(..)
     , Pretty.unsafeViaShow
+    , Category(..)
     , Arrow(..)
     ) where
 
 import Control.Arrow (Arrow(..))
 import Control.Applicative (Alternative(..))
+import Control.Category (Category(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)

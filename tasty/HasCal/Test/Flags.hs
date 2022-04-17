@@ -44,6 +44,7 @@ module HasCal.Test.Flags where
 
 import Control.Monad (forever)
 import HasCal
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit

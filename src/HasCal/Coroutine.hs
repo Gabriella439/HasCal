@@ -47,6 +47,7 @@ module HasCal.Coroutine
     , (|->)
     , domain
     , range
+    , subset
     , choose
 
     -- * Model checking
@@ -638,6 +639,10 @@ domain = HashMap.keys
 -}
 range :: HashMap key value -> [value]
 range = HashMap.elems
+
+-- | The powerset of a list, like the @SUBSET@ function in TLA+
+subset :: [a] -> [[a]]
+subset = Monad.filterM (\_ -> [False, True])
 
 {-| Find the first matching element, like the @CHOOSE@ function in TLA+ except
     that this will return a `Nothing` instead of throwing an exception

@@ -32,6 +32,7 @@ module HasCal.Test.Trade where
 import Control.Monad (when)
 import Data.Foldable (traverse_)
 import HasCal hiding (to)
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
