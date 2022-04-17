@@ -38,7 +38,8 @@ test-suite tasty
                     , tasty-expected-failure
                     , tasty-hunit
                     , tasty-discover
-    other-modules:    HasCal.Test.EuclidAlg
+    other-modules:    HasCal.Test.AsyncInterface
+                    , HasCal.Test.EuclidAlg
                     , HasCal.Test.FastMutex
     hs-source-dirs:   tasty
     ghc-options:      -Wall

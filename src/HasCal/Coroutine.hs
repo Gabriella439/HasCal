@@ -963,7 +963,7 @@ model
                         lift (State.put $! HashSet.insert seenKey seen)
 
                         put $! Timeline
-                            { _processStatus 
+                            { _processStatus
                             , _history = newHistory
                             , _historySet = HashSet.insert historyKey _historySet
                             , _propertyStatus = newPropertyStatus
