@@ -49,8 +49,8 @@ module HasCal.Coroutine
     , choose
 
     -- * Model checking
-    , Options(..)
-    , defaultOptions
+    , Model(..)
+    , defaultModel
     , model
 
       -- * Error handling
@@ -802,22 +802,42 @@ instance Pretty ModelException where
 
     pretty Failure{ _message } = "Failure: " <> pretty _message
 
--- | Model-checking options
-data Options = Options
+{-| A `Model` represents the  model to check, alongside all model-checking
+    options
+-}
+data Model global label = Model
     { termination :: Bool
       -- ^ When `True`, throw a `Nontermination` exception if any cycles are
       -- detected or a `Deadlock` exception if no execution branch terminates
     , debug :: Bool
       -- ^ When `True`, pretty-print any exception before throwing the
       --   exception
+    , coroutine :: Coroutine global label
+      -- ^ `Coroutine` to check
+    , property :: Property (global, label) Bool
+      -- ^ `Property` to check
+    , startingGlobals :: [global]
+      -- ^ Possible starting global states
     }
 
 {-| Default model-checking options
 
-> defaultOptions = Options{ termination = True, debug = False }
+> defaultModel = Model
+>     { termination = True
+>     , debug = False
+>     , coroutine = mempty
+>     , property = pure True
+>     , startingGlobals = pure ()
+>     }
 -}
-defaultOptions :: Options
-defaultOptions = Options{ termination = True, debug = False }
+defaultModel :: Model () ()
+defaultModel = Model
+    { termination = True
+    , debug = False
+    , coroutine = mempty
+    , property = pure True
+    , startingGlobals = pure ()
+    }
 
 {-  This type is used internally within the `model` function to keep track of
     state specific to one \"timeline\" of the model checker (i.e. one possible
@@ -861,20 +881,16 @@ model
        , Show global
        , Show label
        )
-    => Options
+    => Model global label
     -- ^ Model checking options
-    -> Coroutine global label
-    -- ^ `Coroutine` to check
-    -> Property (global, label) Bool
-    -- ^ `Property` to check
-    -> [global]
-    -- ^ Starting global state
     -> IO ()
-model
-    Options{ debug, termination }
-    Coroutine{ startingLabel, startingLocals, process }
-    property
-    startingGlobals =
+model Model
+    { debug
+    , termination
+    , property
+    , startingGlobals
+    , coroutine = Coroutine{ startingLabel, startingLocals, process }
+    } =
     case Property.check property of
         Check finalPropertyStatus stepProperty -> do
             successfulBranches <- handler

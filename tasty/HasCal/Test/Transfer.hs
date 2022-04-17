@@ -62,18 +62,23 @@ test_transfer :: TestTree
 test_transfer =
     Failure.expectFailBecause "The example has a deliberate TOCTOU bug" do
         HUnit.testCase "Transfer" do
-            model defaultOptions coroutine property initial
+            model defaultModel
+                { debug = True
+
+                , startingGlobals = do
+                    let _alice_account = 10
+                    let _bob_account   = 10
+                    let _account_total = _alice_account + _bob_account
+                    return Global{..}
+
+                , coroutine = traverse transfer [ 1 .. 2 ]
+
+                , property =
+                    let predicate (Global{..}, _) =
+                            _alice_account + _bob_account == _account_total
+                    in  arr predicate
+                }
   where
-    initial :: [Global]
-    initial = do
-        let _alice_account = 10
-        let _bob_account   = 10
-        let _account_total = _alice_account + _bob_account
-        return Global{..}
-
-    coroutine :: Coroutine Global [Label]
-    coroutine = traverse transfer [ 1 .. 2 ]
-
     transfer :: Int -> Coroutine Global Label
     transfer _ = Coroutine
         { startingLabel = Transfer
@@ -96,9 +101,3 @@ test_transfer =
             alice_new <- use (global.alice_account)
             assert (alice_new >= 0)
         }
-
-    property :: Property (Global, [Label]) Bool
-    property = arr predicate
-      where
-        predicate (Global{..}, _) =
-            _alice_account + _bob_account == _account_total

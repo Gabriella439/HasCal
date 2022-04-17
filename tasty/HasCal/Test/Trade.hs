@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeApplications  #-}
 
 {-| This example is from the "Introduction" section of the "Learn TLA+" guide
 
@@ -41,9 +42,8 @@ data People = Alice | Bob
 data Items = Ore | Sheep | Brick
     deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
 
-data Global = Global
-    { _owner_of :: HashMap Items People
-    } deriving (Eq, Generic, Hashable, Show)
+data Global = Global { _owner_of :: HashMap Items People }
+    deriving (Eq, Generic, Hashable, Show)
 
 instance Pretty Global where pretty = unsafeViaShow
 
@@ -51,14 +51,18 @@ makeLenses ''Global
 
 test_trade :: TestTree
 test_trade = HUnit.testCase "Trade" do
-    model defaultOptions coroutine property initial
+    model defaultModel
+        { debug = True
+
+        , startingGlobals = do
+            _owner_of <- universe @Items --> universe @People
+            return Global{..}
+
+        , coroutine = traverse_ giveitem [ 1 .. 3 ]
+
+        , property = pure True
+        }
   where
-    initial = do
-        _owner_of <- universe --> universe
-        return Global{..}
-
-    coroutine = traverse_ giveitem [ 1 .. 3 ]
-
     giveitem :: Int -> Coroutine Global ()
     giveitem _ = Coroutine
         { startingLabel = ()
@@ -66,14 +70,12 @@ test_trade = HUnit.testCase "Trade" do
         , startingLocals = pure ()
 
         , process = do
-            item            <- with universe
-            to              <- with universe
-            origin_of_trade <- with universe
+            item            <- with (universe @Items)
+            to              <- with (universe @People)
+            origin_of_trade <- with (universe @People)
 
             Just owner <- preuse (global.owner_of.ix item)
 
             when (origin_of_trade == owner) do
                 global.owner_of.ix item .= to
         }
-
-    property = pure True

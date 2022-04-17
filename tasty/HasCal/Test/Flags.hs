@@ -50,23 +50,27 @@ import qualified Test.Tasty.HUnit as HUnit
 data Global = Global{ _f1 :: Bool, _f2 :: Bool, _f3 :: Bool }
     deriving (Eq, Generic, Hashable, Show)
 
-makeLenses ''Global
-
-data Label = A | B
-    deriving (Eq, Generic, Hashable, Show)
+data Label = A | B deriving (Eq, Generic, Hashable, Show)
 
 instance Pretty Global where pretty = unsafeViaShow
 instance Pretty Label  where pretty = unsafeViaShow
 
+makeLenses ''Global
+
 test_flags :: TestTree
 test_flags = HUnit.testCase "Flags" do
-    let initial = do
+    model defaultModel
+        { debug = True
+
+        , termination = False
+
+        , startingGlobals = do
             _f1 <- universe
             _f2 <- universe
             _f3 <- universe
             return Global{..}
 
-    let coroutines = Coroutine
+        , coroutine = Coroutine
             { startingLabel = A
 
             , startingLocals = pure ()
@@ -78,6 +82,5 @@ test_flags = HUnit.testCase "Flags" do
                 global.f .= bool
             }
 
-    let property = pure True
-
-    model defaultOptions{ debug = True, termination = False } coroutines property initial
+        , property = pure True
+        }

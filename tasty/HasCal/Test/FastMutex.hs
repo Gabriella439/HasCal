@@ -19,11 +19,6 @@ import qualified Test.Tasty.HUnit as HUnit
 data Global = Global{ _x :: Int, _y :: Int, _b :: HashMap Int Bool }
     deriving (Eq, Generic, Hashable, Show)
 
-makeLenses ''Global
-
-instance Pretty Global where
-    pretty = unsafeViaShow
-
 data Label
     = Default
     | NonCriticalSection
@@ -32,25 +27,31 @@ data Label
     | Line Natural
     deriving (Eq, Generic, Hashable, Show)
 
-instance Pretty Label where
-    pretty = unsafeViaShow
+instance Pretty Label  where pretty = unsafeViaShow
+instance Pretty Global where pretty = unsafeViaShow
+
+makeLenses ''Global
 
 fastMutex :: Int -> IO ()
-fastMutex n = model defaultOptions{ debug = True, termination = False }
-                    coroutines property do
-    let _x = 0
-    let _y = 0
-    let _b = [ 1.. n ] |-> \_i -> False
-    return Global{..}
+fastMutex n = model defaultModel
+    { debug = True
+
+    , termination = False
+
+    , startingGlobals = do
+        let _x = 0
+        let _y = 0
+        let _b = [ 1.. n ] |-> \_i -> False
+        return Global{..}
+
+    , coroutine = for [ 1 .. n ] proc
+
+    , property =
+        let predicate (_, labels) =
+                length (filter (== CriticalSection) labels) <= 1
+        in  arr predicate
+    }
   where
-    coroutines :: Coroutine Global [Label]
-    coroutines = for [ 1 .. n ] proc
-
-    property :: Property (Global, [Label]) Bool
-    property = arr predicate
-      where
-        predicate (_, labels) = length (filter (== CriticalSection) labels) <= 1
-
     proc :: Int -> Coroutine Global Label
     proc self = Coroutine
         { startingLabel = Default

@@ -21,17 +21,24 @@ import qualified Test.Tasty.HUnit as HUnit
 data Global = Global { _u :: Int, _v :: Int }
     deriving (Eq, Generic, Hashable, Show)
 
-makeLenses ''Global
+instance Pretty Global where pretty = unsafeViaShow
 
-instance Pretty Global where
-    pretty = unsafeViaShow
+makeLenses ''Global
 
 initialU :: Int
 initialU = 24
 
 euclidAlg :: Int -> IO ()
 euclidAlg n = do
-    let coroutine = Coroutine
+    model defaultModel
+        { debug = True
+
+        , startingGlobals = do
+            _v <- [ 1 .. n ]
+            let _u = initialU
+            return Global{..}
+
+        , coroutine = Coroutine
             { startingLabel = ()
 
             , startingLocals = pure ()
@@ -51,14 +58,8 @@ euclidAlg n = do
                 assert (finalV == Prelude.gcd initialU initialV)
             }
 
-    let property = pure True
-
-    let initial = do
-            _v <- [ 1 .. n ]
-            let _u = initialU
-            return Global{..}
-
-    model defaultOptions{ debug = True } coroutine property initial
+        , property = pure True
+        }
 
 gcd :: Int -> Int -> Maybe Int
 gcd x y =
