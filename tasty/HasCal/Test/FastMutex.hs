@@ -7,6 +7,7 @@
 -- | This example is taken from section 2.6 of "A PlusCal User's Manual"
 module HasCal.Test.FastMutex where
 
+import Control.Monad (when)
 import Data.Traversable (for)
 import HasCal
 import Numeric.Natural (Natural)

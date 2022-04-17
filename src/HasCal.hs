@@ -47,7 +47,6 @@ module HasCal
     , MonadIO(..)
     , Pretty(..)
     , Pretty.unsafeViaShow
-    , Monad.when
     , Arrow(..)
     ) where
 
@@ -62,7 +61,6 @@ import HasCal.Coroutine
 import Lens.Micro.Platform
 import Prettyprinter (Pretty(..))
 
-import qualified Control.Monad as Monad
 import qualified Prettyprinter as Pretty
 
 -- TODO: Add highlighting to pretty-printed output
