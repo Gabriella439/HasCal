@@ -93,11 +93,10 @@ init :: Universe d => Process (Global d) () (Label d) ()
 init = do
   yield Init
   global.chan.ack <~ use (global.chan.rdy)
-  next
+  Monad.forever next
 
 next :: Universe d => Process (Global d) () (Label d) ()
 next =
-  Monad.forever do
     either
       [ existsU send
       , rcv
