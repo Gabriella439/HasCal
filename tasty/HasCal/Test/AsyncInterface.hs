@@ -69,9 +69,9 @@ asyncInterface :: IO ()
 asyncInterface =
   model defaultOptions{ debug = True, termination = False }
         coroutine property do
-    _val <- fromList universe
-    _rdy <- fromList universe
-    _ack <- fromList universe
+    _val <- universe
+    _rdy <- universe
+    _ack <- universe
     let _chan = Chan{..}
     return Global{..}
   where

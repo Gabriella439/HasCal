@@ -49,7 +49,7 @@ euclidAlg n = do
             assert (finalV == Prelude.gcd initialU initialV)
 
     model defaultOptions{ debug = True } Begin{..} (pure True) do
-        _v <- fromList [ 1 .. n ]
+        _v <- [ 1 .. n ]
         let _u = initialU
         return Global{..}
 

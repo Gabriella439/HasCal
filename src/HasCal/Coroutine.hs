@@ -70,7 +70,6 @@ import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
 import Data.Hashable (Hashable(..))
 import Data.Int (Int8, Int16, Int32, Int64)
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
@@ -592,8 +591,8 @@ p <=> q = (p ==> q) && (q ==> p)
 infixr 1 ==>, <=>
 
 -- | All possible boolean values, like the @BOOLEAN@ set in TLA+
-boolean :: NonEmpty Bool
-boolean = False :| [ True ]
+boolean :: [Bool]
+boolean = universe
 
 -- | A function set, like the @->@ operator in TLA+
 (-->)
@@ -839,8 +838,8 @@ processStatus
     :: Lens' (Timeline global local label status) (Status global local)
 processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
 
-{-| Run the model checker on a `Coroutine` by supplying a `NonEmpty` list of
-    starting states
+{-| Run the model checker on a `Coroutine` by supplying a list of starting
+    states
 
     If you want to check more than one `Coroutine`, then combine those
     `Coroutine`s using `Applicative` operations or @ApplicativeDo@ notation
@@ -861,7 +860,7 @@ model
     -- ^ `Coroutine` to check
     -> Property (global, label) Bool
     -- ^ `Property` to check
-    -> NonEmpty global
+    -> [global]
     -- ^ Starting global state
     -> IO ()
 model

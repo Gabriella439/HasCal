@@ -42,14 +42,12 @@ module HasCal
     , module Lens.Micro.Platform
     , Generic
     , HashMap
-    , NonEmpty(..)
     , Alternative(..)
     , Hashable
     , MonadIO(..)
     , Pretty(..)
     , Pretty.unsafeViaShow
     , Monad.when
-    , fromList
     , Arrow(..)
     ) where
 
@@ -58,8 +56,6 @@ import Control.Applicative (Alternative(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
-import Data.List.NonEmpty (NonEmpty(..))
-import GHC.Exts (fromList)
 import GHC.Generics (Generic)
 import HasCal.Property
 import HasCal.Coroutine
