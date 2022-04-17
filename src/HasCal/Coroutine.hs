@@ -33,6 +33,7 @@ module HasCal.Coroutine
     , while
     , await
     , assert
+    , die
     , print
 
     -- * TLA+ expressions
@@ -549,6 +550,10 @@ assert True  = skip
 assert False = do
     _status <- get
     Exception.throw AssertionFailed{ _status }
+
+-- | Die with an error message
+die :: Text -> Process global local label result
+die _message = Exception.throw Failure{ _message }
 
 {-| Print a value to the console for debugging purposes, like a @print@
     statement in PlusCal
