@@ -56,7 +56,7 @@ fastMutex n = model defaultOptions{ debug = True, termination = False }
       where
         startingLabel = Default
 
-        startingLocal = ()
+        startingLocals = pure ()
 
         process = ncs
 

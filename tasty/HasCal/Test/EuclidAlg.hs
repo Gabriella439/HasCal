@@ -33,7 +33,7 @@ euclidAlg :: Int -> IO ()
 euclidAlg n = do
     let startingLabel = ()
 
-    let startingLocal = ()
+    let startingLocals = pure ()
 
     let process = do
             initialV <- use (global.v)

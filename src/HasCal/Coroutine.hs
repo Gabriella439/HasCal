@@ -295,20 +295,22 @@ data Coroutine global label =
         forall local
     .   (Eq local, Hashable local, Pretties local, Show local)
     =>  Begin
-            { startingLabel :: label
-            , startingLocal :: local
-            , process       :: Process global local label ()
+            { startingLabel  :: label
+            , startingLocals :: [local]
+            , process        :: Process global local label ()
             }
 
 instance Functor (Coroutine global) where
     fmap = Applicative.liftA
 
 instance Applicative (Coroutine global) where
-    pure label = Begin label () empty
+    pure label = Begin label [()] empty
 
-    Begin label0F sF fs0 <*> Begin label0X sX xs0 = Begin label0FX (sF, sX) fxs
+    Begin label0F sF fs0 <*> Begin label0X sX xs0 = Begin label0FX s fxs
       where
         (label0FX, fxs) = loop (label0F, fs0) (label0X, xs0)
+
+        s = liftA2 (,) sF sX
 
         loop (label1F, Choice fs) (label1X, Choice xs) =
             (   label1F label1X
@@ -869,7 +871,7 @@ model
     -> IO ()
 model
     Options{ debug, termination }
-    Begin{ startingLabel, startingLocal, process }
+    Begin{ startingLabel, startingLocals, process }
     property
     startingGlobals =
     case Property.check property of
@@ -890,6 +892,8 @@ model
 
             action = do
                 startingGlobal <- lift (List.select startingGlobals)
+
+                startingLocal <- lift (List.select startingLocals)
 
                 let startingProcessStatus = Status
                         { _global = startingGlobal

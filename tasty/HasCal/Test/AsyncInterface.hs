@@ -80,7 +80,7 @@ asyncInterface =
       where
         startingLabel = Init
 
-        startingLocal = ()
+        startingLocals = pure ()
 
         process = init
 
