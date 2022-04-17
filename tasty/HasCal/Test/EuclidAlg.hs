@@ -12,7 +12,7 @@ module HasCal.Test.EuclidAlg where
 
 import Control.Monad (when)
 import HasCal
-import Prelude hiding (gcd, print)
+import Prelude hiding (gcd, print, (.))
 import Test.Tasty (TestTree)
 
 import qualified Prelude

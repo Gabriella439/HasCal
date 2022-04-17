@@ -11,6 +11,7 @@ import Control.Monad (when)
 import Data.Traversable (for)
 import HasCal
 import Numeric.Natural (Natural)
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Control.Monad    as Monad
@@ -49,7 +50,7 @@ fastMutex n = model defaultModel
     , property =
         let predicate (_, labels) =
                 length (filter (== CriticalSection) labels) <= 1
-        in  arr predicate
+        in  always . arr predicate
     }
   where
     proc :: Int -> Coroutine Global Label
@@ -62,7 +63,7 @@ fastMutex n = model defaultModel
         }
       where
         ncs = do
-            yield CriticalSection
+            yield NonCriticalSection
             start
 
         start :: Process Global () Label a

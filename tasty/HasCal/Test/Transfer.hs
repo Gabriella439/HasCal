@@ -35,6 +35,7 @@ module HasCal.Test.Transfer where
 
 import Control.Monad (when)
 import HasCal
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
@@ -74,7 +75,7 @@ test_transfer =
                 , property =
                     let predicate (Global{..}, _) =
                             _alice_account + _bob_account == _account_total
-                    in  arr predicate
+                    in  always . arr predicate
                 }
   where
     transfer :: Int -> Coroutine Global Label

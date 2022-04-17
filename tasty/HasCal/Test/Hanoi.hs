@@ -38,6 +38,7 @@ module HasCal.Test.Hanoi where
 
 import Control.Monad (forever)
 import HasCal hiding (to)
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
@@ -52,9 +53,7 @@ test_hanoi =
     Failure.expectFailBecause "The original example intentionally fails" do
         HUnit.testCase "Hanoi" do
             model defaultModel
-                { debug = True
-
-                , termination = False
+                { termination = False
 
                 , startingGlobals = do
                     let board :: [[Int]]

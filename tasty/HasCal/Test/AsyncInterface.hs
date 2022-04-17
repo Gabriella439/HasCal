@@ -33,7 +33,7 @@
 module HasCal.Test.AsyncInterface where
 
 import HasCal
-import Prelude hiding (either, init)
+import Prelude hiding (either, init, (.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
@@ -112,7 +112,5 @@ test_asyncInterface = HUnit.testCase "Async interface" do
             , process        = init
             }
 
-        , property =
-            let predicate (_global, _label) = True
-            in  arr predicate
+        , property = pure True
         }
