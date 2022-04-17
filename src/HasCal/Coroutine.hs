@@ -10,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE TypeApplications          #-}
 
 {-| This module provides the `Process` and `Coroutine` types and associated
     utilities for working with them
@@ -599,7 +600,7 @@ infixr 1 ==>, <=>
 
 -- | All possible boolean values, like the @BOOLEAN@ set in TLA+
 boolean :: [Bool]
-boolean = universe
+boolean = universe @Bool
 
 -- | A function set, like the @->@ operator in TLA+
 (-->)
