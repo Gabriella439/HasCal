@@ -1,8 +1,9 @@
-{-# LANGUAGE BlockArguments  #-}
-{-# LANGUAGE DeriveAnyClass  #-}
-{-# LANGUAGE DeriveGeneric   #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BlockArguments   #-}
+{-# LANGUAGE DeriveAnyClass   #-}
+{-# LANGUAGE DeriveGeneric    #-}
+{-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE TemplateHaskell  #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-| This example is from the "Behaviors" section of the "Learn TLA+" guide
 
@@ -65,9 +66,9 @@ test_flags = HUnit.testCase "Flags" do
         , termination = False
 
         , startingGlobals = do
-            _f1 <- universe
-            _f2 <- universe
-            _f3 <- universe
+            _f1 <- universe @Bool
+            _f2 <- universe @Bool
+            _f3 <- universe @Bool
             return Global{..}
 
         , coroutine = Coroutine

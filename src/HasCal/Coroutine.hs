@@ -598,7 +598,12 @@ p <=> q = (p ==> q) && (q ==> p)
 
 infixr 1 ==>, <=>
 
--- | All possible boolean values, like the @BOOLEAN@ set in TLA+
+{-| All possible boolean values, like the @BOOLEAN@ set in TLA+
+
+@
+`boolean` = `universe` @`Bool`
+@
+-}
 boolean :: [Bool]
 boolean = universe @Bool
 
@@ -823,13 +828,13 @@ data Model global label = Model
 
 {-| Default model-checking options
 
-> defaultModel = Model
->     { termination = True
->     , debug = False
->     , coroutine = mempty
->     , property = pure True
->     , startingGlobals = pure ()
->     }
+    > defaultModel = Model
+    >     { termination = True
+    >     , debug = False
+    >     , coroutine = mempty
+    >     , property = pure True
+    >     , startingGlobals = pure ()
+    >     }
 -}
 defaultModel :: Model () ()
 defaultModel = Model
