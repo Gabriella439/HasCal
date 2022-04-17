@@ -153,7 +153,7 @@ hoistStep _    List.Nil        = List.Nil
     * (`<>`) - Run two `Process`es sequentially and combine their return values
 
     Finally, you will need to convert a `Process` into a `Coroutine` by wrapping
-    the `Process` in the `Begin` constructor
+    the `Process` in the `Coroutine` constructor
 -}
 newtype Process global local label result
     = Choice
@@ -281,8 +281,8 @@ local k (Status a b) = fmap (\b' -> Status a b') (k b)
 
     You can create a `Coroutine` in the following ways:
 
-    * The `Begin` constructor - Wrap a `Process` with a starting state and label
-      to create a `Coroutine`
+    * The `Coroutine`` constructor - Wrap a `Process` with a starting state and
+      label to create a `Coroutine`
     * `pure` - A `Coroutine` with a single state and no valid transitions
     * `mempty` - A `Coroutine` that does nothing
 
