@@ -89,7 +89,7 @@ main = do
     let property = arr predicate
           where
             predicate (Global{..}, _) =
-                _alice_account + _bob_account == _account_total```
+                _alice_account + _bob_account == _account_total
 
     model defaultOptions coroutine property initial
 ```
