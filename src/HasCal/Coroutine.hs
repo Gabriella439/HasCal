@@ -648,16 +648,19 @@ data ModelException =
       =>  Nontermination { _history :: [(label, status)] }
           -- ^ The process does not necessarily terminate because at least one
           --   branch of execution permits an infinite cycle
+    |     Deadlock
+          -- ^ The process deadlocked, meaning that no branch of execution
+          --   successfully ran to completion
     |     forall local . (Pretty local, Show local)
       =>  AssertionFailed { _status :: local }
-          -- The process failed to satisfy an `assert` statement
+          -- ^ The process failed to satisfy an `assert` statement
     |     forall global label
       .   (Pretty global, Pretty label, Show global, Show label)
       =>  PropertyFailed
                { _propertyHistory :: [(global, label)]
                , _reason :: PropertyFailedReason
                }
-          -- At least one branch of execution failed to satisfy the specified
+          -- ^ At least one branch of execution failed to satisfy the specified
           -- `Property`
     |     Failure { _message :: Text }
           -- ^ Used by the `fail` method
@@ -678,6 +681,8 @@ instance Show ModelException where
           showString "Nontermination {_history = "
         . Show.showListWith shows _history
         . showString "}"
+    showsPrec _ Deadlock =
+          showString "Deadlock"
     showsPrec _ AssertionFailed{ _status } =
           showString "AssertionFailed {_status = "
         . shows _status
@@ -736,6 +741,9 @@ instance Pretty ModelException where
                             )
                         <>  Pretty.hardline
 
+    pretty Deadlock =
+        "Deadlock"
+
     pretty AssertionFailed{ _status } =
         Pretty.align
             (   "Assertion failed"
@@ -791,7 +799,8 @@ instance Pretty ModelException where
 -- | Model-checking options
 data Options = Options
     { termination :: Bool
-      -- ^ When `True`, throw an exception if any cycles are detected
+      -- ^ When `True`, throw a `Nontermination` exception if any cycles are
+      -- detected or a `Deadlock` exception if no execution branch terminates
     , debug :: Bool
       -- ^ When `True`, pretty-print any exception before throwing the
       --   exception
@@ -861,12 +870,17 @@ model
     property
     startingGlobals =
     case Property.check property of
-        Check finalPropertyStatus stepProperty ->
-            handler
+        Check finalPropertyStatus stepProperty -> do
+            successfulBranches <- handler
                 (State.evalStateT
-                    (List.runListT (State.evalStateT action uninitializedTimeline))
+                    (List.fold (\n _ -> n + 1) (0 :: Natural) id
+                        (State.evalStateT action uninitializedTimeline)
+                    )
                     startingSet
                 )
+
+            Monad.unless (termination ==> 0 < successfulBranches) do
+                Exception.throw Deadlock
           where
             uninitializedTimeline =
                 error "Internal error - Uninitialized timeline"
