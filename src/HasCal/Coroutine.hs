@@ -90,7 +90,6 @@ import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
-import qualified Data.Text as Text
 import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
 import qualified List.Transformer as List
@@ -176,7 +175,7 @@ instance Monad (Process global local label) where
             Done result -> possibilities (f result)
 
 instance MonadFail (Process global local label) where
-    fail message = throwM (Failure (Text.pack message))
+    fail _ = empty
 
 instance Alternative (Process global local label) where
     empty = Choice empty
