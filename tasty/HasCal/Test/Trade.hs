@@ -60,13 +60,12 @@ test_trade = HUnit.testCase "Trade" do
     coroutine = traverse_ giveitem [ 1 .. 3 ]
 
     giveitem :: Int -> Coroutine Global ()
-    giveitem _ = Begin{..}
-      where
-        startingLabel = ()
+    giveitem _ = Coroutine
+        { startingLabel = ()
 
-        startingLocals = pure ()
+        , startingLocals = pure ()
 
-        process = do
+        , process = do
             item            <- with universe
             to              <- with universe
             origin_of_trade <- with universe
@@ -75,5 +74,6 @@ test_trade = HUnit.testCase "Trade" do
 
             when (origin_of_trade == owner) do
                 global.owner_of.ix item .= to
+        }
 
     property = pure True

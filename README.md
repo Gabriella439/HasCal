@@ -62,15 +62,14 @@ main = do
             let _account_total = _alice_account + _bob_account
             return Global{..}
 
-    let transfer _ = Begin{..}
-      where
-        startingLabel = Transfer
+    let transfer _ = Coroutine
+        { startingLabel = Transfer
 
-        startingLocals = do
+        , startingLocals = do
             _money <- [ 1 .. 20 ]
             return Local{..}
 
-        process = do
+        , process = do
             _money <- use (local.money)
 
             alice_old <- use (global.alice_account)
@@ -83,6 +82,7 @@ main = do
             yield C
             alice_new <- use (global.alice_account)
             assert (alice_new >= 0)
+        }
 
     let coroutine = traverse transfer [ 1 .. 2 ]
 

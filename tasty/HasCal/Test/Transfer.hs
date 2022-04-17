@@ -75,15 +75,14 @@ test_transfer =
     coroutine = traverse transfer [ 1 .. 2 ]
 
     transfer :: Int -> Coroutine Global Label
-    transfer _ = Begin{..}
-      where
-        startingLabel = Transfer
+    transfer _ = Coroutine
+        { startingLabel = Transfer
 
-        startingLocals = do
+        , startingLocals = do
             _money <- [ 1 .. 20 ]
             return Local{..}
 
-        process = do
+        , process = do
             _money <- use (local.money)
 
             alice_old <- use (global.alice_account)
@@ -96,6 +95,7 @@ test_transfer =
             yield C
             alice_new <- use (global.alice_account)
             assert (alice_new >= 0)
+        }
 
     property :: Property (Global, [Label]) Bool
     property = arr predicate

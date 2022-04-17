@@ -52,14 +52,14 @@ fastMutex n = model defaultOptions{ debug = True, termination = False }
         predicate (_, labels) = length (filter (== CriticalSection) labels) <= 1
 
     proc :: Int -> Coroutine Global Label
-    proc self = Begin{..}
+    proc self = Coroutine
+        { startingLabel = Default
+
+        , startingLocals = pure ()
+
+        , process = ncs
+        }
       where
-        startingLabel = Default
-
-        startingLocals = pure ()
-
-        process = ncs
-
         ncs = do
             yield CriticalSection
             start

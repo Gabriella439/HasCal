@@ -294,7 +294,7 @@ local k (Status a b) = fmap (\b' -> Status a b') (k b)
 data Coroutine global label =
         forall local
     .   (Eq local, Hashable local, Pretties local, Show local)
-    =>  Begin
+    =>  Coroutine
             { startingLabel  :: label
             , startingLocals :: [local]
             , process        :: Process global local label ()
@@ -304,9 +304,10 @@ instance Functor (Coroutine global) where
     fmap = Applicative.liftA
 
 instance Applicative (Coroutine global) where
-    pure label = Begin label [()] empty
+    pure label = Coroutine label (pure ()) empty
 
-    Begin label0F sF fs0 <*> Begin label0X sX xs0 = Begin label0FX s fxs
+    Coroutine label0F sF fs0 <*> Coroutine label0X sX xs0 =
+        Coroutine label0FX s fxs
       where
         (label0FX, fxs) = loop (label0F, fs0) (label0X, xs0)
 
@@ -871,7 +872,7 @@ model
     -> IO ()
 model
     Options{ debug, termination }
-    Begin{ startingLabel, startingLocals, process }
+    Coroutine{ startingLabel, startingLocals, process }
     property
     startingGlobals =
     case Property.check property of

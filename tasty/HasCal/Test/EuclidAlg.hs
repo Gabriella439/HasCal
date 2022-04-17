@@ -31,28 +31,34 @@ initialU = 24
 
 euclidAlg :: Int -> IO ()
 euclidAlg n = do
-    let startingLabel = ()
+    let coroutine = Coroutine
+            { startingLabel = ()
 
-    let startingLocals = pure ()
+            , startingLocals = pure ()
 
-    let process = do
-            initialV <- use (global.v)
-            while (do u_ <- use (global.u); return (u_ /= 0)) do
-                tempU <- use (global.u)
-                tempV <- use (global.v)
-                when (tempU < tempV) do
-                    global.u .= tempU
-                    global.v .= tempV
-                newV <- use (global.v)
-                global.u -= newV
-            finalV <- use (global.v)
-            assert (Just finalV == gcd initialU initialV)
-            assert (finalV == Prelude.gcd initialU initialV)
+            , process = do
+                initialV <- use (global.v)
+                while (do u_ <- use (global.u); return (u_ /= 0)) do
+                    tempU <- use (global.u)
+                    tempV <- use (global.v)
+                    when (tempU < tempV) do
+                        global.u .= tempU
+                        global.v .= tempV
+                    newV <- use (global.v)
+                    global.u -= newV
+                finalV <- use (global.v)
+                assert (Just finalV == gcd initialU initialV)
+                assert (finalV == Prelude.gcd initialU initialV)
+            }
 
-    model defaultOptions{ debug = True } Begin{..} (pure True) do
-        _v <- [ 1 .. n ]
-        let _u = initialU
-        return Global{..}
+    let property = pure True
+
+    let initial = do
+            _v <- [ 1 .. n ]
+            let _u = initialU
+            return Global{..}
+
+    model defaultOptions{ debug = True } coroutine property initial
 
 gcd :: Int -> Int -> Maybe Int
 gcd x y =

@@ -66,12 +66,17 @@ test_flags = HUnit.testCase "Flags" do
             _f3 <- universe
             return Global{..}
 
-    let coroutines = Begin A (pure ()) do
-            forever do
+    let coroutines = Coroutine
+            { startingLabel = A
+
+            , startingLocals = pure ()
+
+            , process = forever do
                 yield B
                 f    <- with [ f1, f2, f3 ]
                 bool <- with universe
                 global.f .= bool
+            }
 
     let property = pure True
 

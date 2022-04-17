@@ -76,13 +76,11 @@ asyncInterface =
     return Global{..}
   where
     coroutine :: Coroutine (Global Data) (Label Data)
-    coroutine = Begin{..}
-      where
-        startingLabel = Init
-
-        startingLocals = pure ()
-
-        process = init
+    coroutine = Coroutine
+        { startingLabel = Init
+        , startingLocals = pure ()
+        , process = init
+        }
 
     property :: Property (Global Data, Label Data) Bool
     property = arr predicate
