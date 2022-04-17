@@ -812,7 +812,7 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options{ termination = True, debug = False }
 
-{-| This type is used internally within the `model` function to keep track of
+{-  This type is used internally within the `model` function to keep track of
     state specific to one \"timeline\" of the model checker (i.e. one possible
     branch of execution)
 
@@ -833,7 +833,7 @@ data Timeline global local label status = Timeline
     , _propertyHistory :: [(global, label)]
     }
 
--- | A lens for accessing the `_processStatus` field of a `Timeline`
+-- A lens for accessing the process status of a `Timeline`
 processStatus
     :: Lens' (Timeline global local label status) (Status global local)
 processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)

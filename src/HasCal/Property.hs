@@ -210,7 +210,7 @@ data Pair a b = Pair !a !b
     this class directly
 
     For most types, the easiest way to implement `Universe` is to
-    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the `DeriveAnyClass`
+    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the @DeriveAnyClass@
     extension
 -}
 class Universe a where
