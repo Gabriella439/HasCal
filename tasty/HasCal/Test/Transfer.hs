@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-{-| This example is from the "An Example" section of the "Learn TLA+" book
+{-| This example is from the "An Example" section of the "Learn TLA+" guide
 
 > ---- MODULE Transfer ----
 > EXTENDS Naturals, TLC
@@ -55,8 +55,8 @@ instance Pretty Label  where pretty = unsafeViaShow
 makeLenses ''Global
 makeLenses ''Local
 
-test_readme :: TestTree
-test_readme = HUnit.testCase "README" do
+test_transfer :: TestTree
+test_transfer = HUnit.testCase "Transfer" do
     model defaultOptions coroutine property initial
   where
     initial :: [Global]
