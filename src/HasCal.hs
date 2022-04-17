@@ -50,8 +50,10 @@ module HasCal
     , Pretty.unsafeViaShow
     , Monad.when
     , fromList
+    , Arrow(..)
     ) where
 
+import Control.Arrow (Arrow(..))
 import Control.Applicative (Alternative(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Hashable (Hashable)

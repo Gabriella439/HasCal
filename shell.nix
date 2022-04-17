@@ -1,40 +1,21 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "default", doBenchmark ? false }:
-
 let
+  nixpkgs = builtins.fetchTarball {
+    url    = "https://github.com/NixOS/nixpkgs/archive/faad370edcb37162401be50d45526f52bb16a713.tar.gz";
+    sha256 = "1d82d4vh0layf6n925j0h2nym16jbvcvps3l5m8ln9hxn0m6gadn";
+  };
 
-  inherit (nixpkgs) pkgs;
+  overlay = pkgsNew: pkgsOld: {
+    haskellPackages = pkgsOld.haskellPackages.override (old : {
+      overrides =
+        pkgsNew.lib.composeExtensions
+          (old.overrides or (_: _: { }))
+          (pkgsNew.haskell.lib.packageSourceOverrides {
+            HasCal = ./.;
+          });
+    });
+  };
 
-  f = { mkDerivation, base, exceptions, hashable, lib
-      , list-transformer, microlens-platform, mtl, prettyprinter
-      , profunctors, safe-exceptions, tasty, tasty-discover
-      , tasty-expected-failure, tasty-hunit, text
-      , transformers, unordered-containers
-      }:
-      mkDerivation {
-        pname = "HasCal";
-        version = "1.0.0";
-        src = ./.;
-        libraryHaskellDepends = [
-          base exceptions hashable list-transformer microlens-platform mtl
-          prettyprinter profunctors safe-exceptions text transformers
-          unordered-containers
-        ];
-        testHaskellDepends = [
-          base tasty tasty-discover tasty-expected-failure tasty-hunit
-        ];
-        testToolDepends = [ tasty-discover ];
-        description = "Haskell embedding of PlusCal";
-        license = lib.licenses.bsd3;
-      };
-
-  haskellPackages = if compiler == "default"
-                       then pkgs.haskellPackages
-                       else pkgs.haskell.packages.${compiler};
-
-  variant = if doBenchmark then pkgs.haskell.lib.doBenchmark else pkgs.lib.id;
-
-  drv = variant (haskellPackages.callPackage f {});
+  pkgs = import nixpkgs { config = { }; overlays = [ overlay ]; };
 
 in
-
-  if pkgs.lib.inNixShell then drv.env else drv
+  pkgs.haskellPackages.HasCal.env

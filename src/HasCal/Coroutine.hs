@@ -24,15 +24,8 @@ module HasCal.Coroutine
     , global
     , local
 
-      -- * Error handling
-    , ModelException(..)
-
-    -- * Model checking
-    , Options(..)
-    , defaultOptions
-    , model
-
     -- * PlusCal Statements
+    -- $statements
     , yield
     , skip
     , either
@@ -53,6 +46,15 @@ module HasCal.Coroutine
     , domain
     , range
     , choose
+
+    -- * Model checking
+    , Options(..)
+    , defaultOptions
+    , model
+
+      -- * Error handling
+    , ModelException(..)
+    , PropertyFailedReason(..)
 
     -- * Classes
     , Pretties(..)
@@ -144,7 +146,7 @@ hoistStep _    List.Nil        = List.Nil
     Additionally, the utilities in the \"PlusCal utilities\" section wrap the
     above functionality to use more PlusCal-friendly names.
 
-    You can combine one or more `Process`es using:
+    You can combine multiple `Process`es using:
 
     * @do@ notation - Run `Process`es sequentially
     * (`<|>`) - Explore two `Process`es in parallel
@@ -250,11 +252,11 @@ instance (Pretty global, Pretties local) => Pretty (Status global local) where
 
         localDocs = pretties _local
 
--- | A lens for accessing the `_global` state of a `Process`
+-- | A lens for accessing the global state of a `Process`
 global :: Lens' (Status global local) global
 global k (Status a b) = fmap (\a' -> Status a' b) (k a)
 
--- | A lens for accessing the `_local` state of a `Process`
+-- | A lens for accessing the local state of a `Process`
 local :: Lens' (Status global local) local
 local k (Status a b) = fmap (\b' -> Status a b') (k b)
 
@@ -341,6 +343,21 @@ instance Semigroup label => Semigroup (Coroutine global label) where
 instance Monoid label => Monoid (Coroutine global label) where
     mempty = pure mempty
 
+{- $statements
+   This section provides commands that correspond as closely as possible to the
+   equivalent PlusCal commands of the same name.  These commands do not
+   represent the full extent of what you can do within Haskell processes, but
+   they do provide feature parity with PlusCal (with the exception of the
+   @goto@ command, which is not supported here).
+
+   Many of these commands are synonyms for utilities from Haskell's standard
+   library.  For example, `await` is just a synonym for `Monad.guard`.  These
+   synonyms exist primarily for educational purposes, to illustrate how
+   PlusCal idioms correspond to Haskell idioms, but you can still use these
+   synonyms if you want the Haskell code to resemble PlusCal as much as
+   possible.
+-}
+
 {-| End the current atomic transition alongside a label for the current state.
     This potentially yields control to other `Process`es.
 
@@ -378,7 +395,7 @@ yield label = Choice (pure (Yield label mempty))
     >       skip;
     >   end either;
 
-    The Haskell code can elide many of those `skip`s:
+    The equivalent Haskell code can elide many of those `skip`s:
 
 @
 example = do
@@ -415,11 +432,17 @@ skip = mempty
 `either` `empty` = `empty`
 @
 
-    … which implies that:
+    … or equivalently:
 
 @
-`either` [] = `empty`
+`either` (as `++` bs) = `either` as `<|>` `either` bs
 
+`either` [] = `empty`
+@
+
+    Those rules also imply that:
+
+@
 `either` [ a, b ] = a `<|>` b
 @
 -}
@@ -433,8 +456,8 @@ either = Foldable.asum
 {-| Non-deterministically select from one of multiple possible values, like
     a @with@ statement in PlusCal
 
-    `with` is the same thing as using `either` to select from one of multiple
-    `pure` subroutines:
+    `with` is the same thing as using `either` to select from a list of `pure`
+    subroutines:
 
 @
 `with` results = `either` (`fmap` `pure` results)
@@ -447,13 +470,17 @@ either = Foldable.asum
 
 `with` `empty` = `empty`
 
-`with` [ a ] = `pure` a
+`with` (`pure` a) = `pure` a
 @
 
-    … which implies that:
+    … or equivalently:
 
 @
+`with` (as `++` bs) = `with` as `<|>` `with` bs
+
 `with` [] = `empty`
+
+`with` [a] = `pure` a
 @
 
 -}
@@ -464,6 +491,10 @@ with results = either (fmap pure results)
 
 {-| Run a loop so long as the loop condition does not return `True`, like a
     @while@ statement in PlusCal
+
+    You will typically /not/ want to use this and instead you will more likely
+    want to use one of the utilities from "Control.Monad".  This is only
+    provided for parity with PlusCal.
 
 @
 `while` (`pure` `True`) body = `Monad.forever` body
@@ -491,13 +522,10 @@ while condition body = do
 
 @
 `await` `False` = `empty`
-`await` `True`  = `skip`
-
-`await` (a `||` b) = `await` a <|> `await` b
-`await` (a `&&` b) = `await` a <> `await` b
-
-`await` `False` = `empty`
 `await` `True`  = `mempty`
+
+`await` (a `||` b) = `await` a `<|>` `await` b
+`await` (a `&&` b) = `await` a `<>` `await` b
 @
 -}
 await :: Bool -> Process global local label ()
@@ -637,7 +665,12 @@ data ModelException =
 -- | The reason why a `PropertyFailed` exception was thrown
 data PropertyFailedReason
     = Unsatisfiable
+    -- ^ The `Property` can no longer satisfied, regardless of future input
     | UnsatisfyingConclusion
+    -- ^ We could not satisfy the `Property` before reaching the end of the
+    --   input sequence.  For example, you would get this error if you check the
+    --   `Property.eventually` `Property` against an input sequence where every
+    --   input was `False`
     deriving (Show)
 
 instance Show ModelException where

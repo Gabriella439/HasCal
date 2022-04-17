@@ -23,6 +23,8 @@ module HasCal.Property
     , eventually
     , always
     , (~>)
+    , prime
+    , following
     , infer
 
     -- * Check
@@ -32,9 +34,6 @@ module HasCal.Property
 
     -- * Universe
     , Universe(..)
-
-    -- * Re-exports
-    , Arrow(..)
     ) where
 
 import Control.Applicative (liftA2)
@@ -46,10 +45,10 @@ import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
 import Prelude hiding (id, (.))
 
-import qualified Control.Monad             as Monad
+import qualified Control.Monad as Monad
 import qualified Control.Monad.Trans.State as State
-import qualified Data.HashSet              as HashSet
-import qualified Data.HashMap.Strict       as HashMap
+import qualified Data.HashSet as HashSet
+import qualified Data.HashMap.Strict as HashMap
 
 {-| A temporal `Property` is a stateful transformation from an @input@ to an
     @output@
@@ -74,7 +73,7 @@ import qualified Data.HashMap.Strict       as HashMap
 
     * (`.`) - You can compose two `Property`s end-to-end, feeding the @output@
       of one property as the @input@ to another `Property`
-    * `Applicative` operations (or `do` notation if you enable @ApplicativeDo@)
+    * `Applicative` operations (or @do@ notation if you enable @ApplicativeDo@)
       - this shares their @input@ and combines their @output@s pointwise
     * (`<>`) - This combines their @output@s pointwise using (`<>`)
     * Numeric operators - These operators combine their @output@s pointwise
@@ -207,7 +206,12 @@ data Pair a b = Pair !a !b
 
     Note that `universe` should be the same thing as
     @[ `minBound` .. `maxBound` ]@ for a type that implements `Bounded` and
-    `Enum`, but it's easier to define instances of this class directly
+    `Enum`, but sometimes it's easier or more efficient to define instances of
+    this class directly
+
+    For most types, the easiest way to implement `Universe` is to
+    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the `DeriveAnyClass`
+    extension
 -}
 class Universe a where
     universe :: [a]
@@ -223,6 +227,12 @@ instance (Universe a, Universe b) => Universe (Pair a b) where
 instance Universe Bool where
     universe = [ False, True ]
 
+data Prime a = Zero | One !a | Two !a !a
+    deriving (Eq, Generic, Hashable)
+
+instance Universe a => Universe (Prime a) where
+    universe = Zero : fmap One universe <> liftA2 Two universe universe
+
 {-| This property outputs `True` if the current input or any future input is
     `True`, and outputs `False` otherwise
 -}
@@ -237,11 +247,45 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
 
 {-| @f `~>` g@ returns `True` if every `True` output of @f@ is eventually
     followed by a `True` output from @g@
+
+    > f ~> g = always . (liftA2 (==>) f (eventually . g))
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
   where
     p ==> q = not p || q
+
+{-| This property outputs each element with the following element (or `Nothing`
+    if there is no following element)
+
+    This is called \"prime\" as a reference to the TLA+ convention of referring
+    to the next value of @x@ using @x'@ (i.e. \"@x@ prime\")
+
+    >>> infer prime [ False, True, True ]
+    [Just (False,True),Just (True,True),Nothing]
+-}
+prime :: (Eq a, Hashable a, Universe a) => Property a (Maybe (a, a))
+prime = Property Zero step
+  where
+    step a0 = State.state f
+      where
+        f  Zero      = (Nothing, One a0)
+        f (One a1  ) = (Just (a0, a1), Two a0 a1)
+        f (Two a1 _) = (Just (a0, a1), Two a0 a1)
+
+{-| This is a more ergonomic version of `prime` for the common case where you
+    want to compare each temporal input against the next input using an
+    equivalence relation
+
+    >>> infer (following (/=)) [ False, False, True, False ]
+    [False,True,True,True]
+-}
+following
+    :: (Eq a, Hashable a, Universe a) => (a -> a -> Bool) -> Property a Bool
+following (?) = arr adapt . prime
+  where
+    adapt  Nothing      = True
+    adapt (Just (x, y)) = x ? y
 
 {-| Convert a `Property` into the equivalent list transformation
 
@@ -292,7 +336,7 @@ infer (Property s k) as =
     Other than the difference in algorithmic complexity, the `Check` type is
     similar to the `Property` type, meaning that they both share the same type
     parameters and the same instances.  However, you generally should prefer to
-    use the instance for the `Property` type because those are more efficient.
+    use the instances for the `Property` type because those are more efficient.
 
     The main difference between `Property` and `Check`  is that the `Property`
     type is abstract, whereas the `Check` type is not  That means that you can
@@ -418,8 +462,9 @@ check (Property s k) = Check s k'
 
     You can think of `checkList` as having the following definition:
 
-    > checkList property pairs =
-    >     infer property (map fst pairs) == map snd pairs
+    > checkList property pairs = infer property inputs == outputs
+    >   where
+    >     (inputs, outputs) = unzip pairs
 
     … except that `checkList` processes the list in a single forward pass
     (unlike `infer`)
@@ -431,15 +476,15 @@ checkList temporal =
           where
             loop states [] =
                 HashSet.member finalState states
-            loop states ((a, bool) : pairs)
+            loop states ((input, output) : pairs)
                 | HashSet.null states = False
                 | otherwise           = loop newStates pairs
               where
                 newStates = HashSet.fromList do
                     state <- HashSet.toList states
 
-                    (b, newState) <- State.runStateT (k a) state
+                    (output', newState) <- State.runStateT (k input) state
 
-                    Monad.guard (b == bool)
+                    Monad.guard (output == output')
 
                     return newState
