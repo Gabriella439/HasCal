@@ -91,7 +91,7 @@ main = do
         , property =
             let predicate (Global{..}, _) =
                     _alice_account + _bob_account == _account_total
-            in  arr predicate
+            in  always . arr predicate
         }
 ```
 
