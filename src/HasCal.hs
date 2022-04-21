@@ -49,6 +49,7 @@ module HasCal
     , Pretty.unsafeViaShow
     , Category(..)
     , Arrow(..)
+    , Profunctor(..)
     ) where
 
 import Control.Arrow (Arrow(..))
@@ -57,6 +58,7 @@ import Control.Category (Category(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
+import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
 import HasCal.Property
 import HasCal.Coroutine
