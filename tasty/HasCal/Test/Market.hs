@@ -64,26 +64,34 @@ import qualified Test.Tasty.HUnit as HUnit
 import qualified Test.Tasty.ExpectedFailure as Failure
 
 data Item = Ore | Sheep | Brick
-    deriving (Bounded, Enum, Eq, Generic, Hashable, Ord, Show, Universe)
+    deriving
+        ( Bounded
+        , Enum
+        , Eq
+        , Generic
+        , Hashable
+        , Ord
+        , Show
+        , ToJSON
+        , ToJSONKey
+        , Universe
+        )
 
 data Vendor = Alice | Bob
-    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
+    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 data Offer = Offer { _buy :: Int, _sell :: Int }
-    deriving (Eq, Generic, Hashable, Show)
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Global = Global
     { _market   :: HashMap (Vendor, Item) Offer
     , _trades   :: HashMap [Item] Item
     , _backpack :: Set Item
     , _profit   :: Int
-    } deriving (Eq, Generic, Hashable, Show)
+    } deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Label = Act | Buy Int | Sell Int | Trade Int
-    deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Global where pretty = unsafeViaShow
-instance Pretty Label  where pretty = unsafeViaShow
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Offer
 makeLenses ''Global

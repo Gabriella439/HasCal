@@ -38,15 +38,23 @@ import Test.Tasty (TestTree)
 import qualified Test.Tasty.HUnit as HUnit
 
 data People = Alice | Bob
-    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
+    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 data Items = Ore | Sheep | Brick
-    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
+    deriving
+        ( Bounded
+        , Enum
+        , Eq
+        , Generic
+        , Hashable
+        , Show
+        , ToJSON
+        , ToJSONKey
+        , Universe
+        )
 
 data Global = Global { _owner_of :: HashMap Items People }
-    deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Global where pretty = unsafeViaShow
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
 

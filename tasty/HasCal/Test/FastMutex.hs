@@ -18,7 +18,7 @@ import qualified Control.Monad    as Monad
 import qualified Test.Tasty.HUnit as HUnit
 
 data Global = Global{ _x :: Int, _y :: Int, _b :: HashMap Int Bool }
-    deriving (Eq, Generic, Hashable, Show)
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Label
     = Default
@@ -26,10 +26,7 @@ data Label
     | Start
     | CriticalSection
     | Line Natural
-    deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Label  where pretty = unsafeViaShow
-instance Pretty Global where pretty = unsafeViaShow
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
 

@@ -44,9 +44,7 @@ import Test.Tasty (TestTree)
 import qualified Test.Tasty.HUnit as HUnit
 import qualified Test.Tasty.ExpectedFailure as Failure
 
-data Label = A | B deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Label where pretty = unsafeViaShow
+data Label = A | B deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 test_hanoi :: TestTree
 test_hanoi =

@@ -45,8 +45,8 @@ module HasCal
     , Alternative(..)
     , Hashable
     , MonadIO(..)
-    , Pretty(..)
-    , Pretty.unsafeViaShow
+    , ToJSON(..)
+    , ToJSONKey(..)
     , Category(..)
     , Arrow(..)
     , Profunctor(..)
@@ -56,6 +56,7 @@ import Control.Arrow (Arrow(..))
 import Control.Applicative (Alternative(..))
 import Control.Category (Category(..))
 import Control.Monad.IO.Class (MonadIO(..))
+import Data.Aeson (ToJSON(..), ToJSONKey(..))
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
 import Data.Profunctor (Profunctor(..))
@@ -63,9 +64,6 @@ import GHC.Generics (Generic)
 import HasCal.Property
 import HasCal.Coroutine
 import Lens.Micro.Platform
-import Prettyprinter (Pretty(..))
-
-import qualified Prettyprinter as Pretty
 
 -- TODO: Add highlighting to pretty-printed output
 -- TODO: Associate local state with process names

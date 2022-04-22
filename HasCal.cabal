@@ -11,6 +11,7 @@ copyright:          2021 Gabriella Gonzalez
 
 common common
     build-depends:    base >=4.14.3.0 && < 5
+                    , aeson
                     , exceptions
                     , hashable
                     , list-transformer
@@ -22,6 +23,7 @@ common common
                     , text
                     , transformers
                     , unordered-containers
+                    , yaml
     hs-source-dirs:   src
     ghc-options:      -Wall
     default-language: Haskell2010

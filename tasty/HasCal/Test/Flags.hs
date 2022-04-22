@@ -50,12 +50,9 @@ import Test.Tasty (TestTree)
 import qualified Test.Tasty.HUnit as HUnit
 
 data Global = Global{ _f1 :: Bool, _f2 :: Bool, _f3 :: Bool }
-    deriving (Eq, Generic, Hashable, Show)
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Label = A | B deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Global where pretty = unsafeViaShow
-instance Pretty Label  where pretty = unsafeViaShow
+data Label = A | B deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
 

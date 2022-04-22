@@ -19,9 +19,7 @@ import qualified Prelude
 import qualified Test.Tasty.HUnit as HUnit
 
 data Global = Global { _u :: Int, _v :: Int }
-    deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Global where pretty = unsafeViaShow
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
 

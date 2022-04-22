@@ -58,9 +58,6 @@ module HasCal.Coroutine
       -- * Error handling
     , ModelException(..)
     , PropertyFailedReason(..)
-
-    -- * Classes
-    , Pretties(..)
     ) where
 
 import Control.Applicative (Alternative(..), liftA2)
@@ -69,13 +66,11 @@ import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState(..), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
+import Data.Aeson (ToJSON(..), Value(..))
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
 import Data.Hashable (Hashable(..))
-import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Text (Text)
-import Data.Void (Void)
-import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics (Generic)
 import HasCal.Property (Check(..), Property, Universe(..))
 import Lens.Micro.Platform (Lens')
@@ -93,6 +88,9 @@ import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
+import qualified Data.Yaml as YAML
 import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
 import qualified List.Transformer as List
@@ -221,37 +219,7 @@ data Status global local = Status
     , _local :: !local
       -- ^ `Process`-local state
     } deriving stock (Eq, Generic, Show)
-      deriving anyclass (Hashable)
-
-instance (Pretty global, Pretties local) => Pretty (Status global local) where
-    pretty Status{ _global, _local } = Pretty.group (Pretty.flatAlt long short)
-      where
-        short
-            | null localDocs =
-                pretty _global
-            | otherwise =
-                    "Global: "
-                <>  pretty _global
-                <>  ", Local: "
-                <>  commas localDocs
-
-        long
-            | null localDocs =
-                pretty _global
-            | otherwise =
-                Pretty.align
-                    (   "Global:"
-                    <>  Pretty.hardline
-                    <>  "  "
-                    <>  pretty _global
-                    <>  Pretty.hardline
-                    <>  "Local:"
-                    <>  Pretty.hardline
-                    <>  "  "
-                    <>  Pretty.align (bullets localDocs)
-                    )
-
-        localDocs = pretties _local
+      deriving anyclass (Hashable, ToJSON)
 
 -- | A lens for accessing the global state of a `Process`
 global :: Lens' (Status global local) global
@@ -295,7 +263,7 @@ local k (Status a b) = fmap (\b' -> Status a b') (k b)
 -}
 data Coroutine global label =
         forall local
-    .   (Eq local, Hashable local, Pretties local, Show local)
+    .   (Eq local, Hashable local, ToJSON local, Show local)
     =>  Coroutine
             { startingLabel  :: label
             , startingLocals :: [local]
@@ -306,14 +274,14 @@ instance Functor (Coroutine global) where
     fmap = Applicative.liftA
 
 instance Applicative (Coroutine global) where
-    pure label = Coroutine label (pure ()) empty
+    pure label = Coroutine label (pure Unit) empty
 
     Coroutine label0F sF fs0 <*> Coroutine label0X sX xs0 =
         Coroutine label0FX s fxs
       where
         (label0FX, fxs) = loop (label0F, fs0) (label0X, xs0)
 
-        s = liftA2 (,) sF sX
+        s = liftA2 Pair sF sX
 
         loop (label1F, Choice fs) (label1X, Choice xs) =
             (   label1F label1X
@@ -331,21 +299,38 @@ instance Applicative (Coroutine global) where
               where
                 (labelFX, restFX) = loop (label1F, Choice fs) (labelX, restX)
 
-            onLeft :: Lens' (Status global (l, r)) (Status global l)
-            onLeft k (Status g (l, r)) = fmap adapt (k (Status g l))
+            onLeft :: Lens' (Status global (Pair l r)) (Status global l)
+            onLeft k (Status g (Pair l r)) = fmap adapt (k (Status g l))
               where
-                adapt (Status g' l') = Status g' (l', r)
+                adapt (Status g' l') = Status g' (Pair l' r)
 
-            onRight :: Lens' (Status global (l, r)) (Status global r)
-            onRight k (Status g (l, r)) = fmap adapt (k (Status g r))
+            onRight :: Lens' (Status global (Pair l r)) (Status global r)
+            onRight k (Status g (Pair l r)) = fmap adapt (k (Status g r))
               where
-                adapt (Status g' r') = Status g' (l, r')
+                adapt (Status g' r') = Status g' (Pair l r')
 
 instance Semigroup label => Semigroup (Coroutine global label) where
     (<>) = liftA2 (<>)
 
 instance Monoid label => Monoid (Coroutine global label) where
     mempty = pure mempty
+
+data Unit = Unit
+    deriving stock (Eq, Generic, Show)
+    deriving anyclass (Hashable)
+
+instance ToJSON Unit where
+    toJSON Unit = toJSON ([] :: [()])
+
+data Pair a b = Pair !a !b
+    deriving stock (Eq, Generic, Show)
+    deriving anyclass (Hashable)
+
+instance (ToJSON a, ToJSON b) => ToJSON (Pair a b) where
+    toJSON (Pair a b) =
+        case (toJSON a, toJSON b) of
+            (Array as, Array bs) -> Array (as <> bs)
+            (a'      , b'      ) -> toJSON [ a', b' ]
 
 {- $statements
    This section provides commands that correspond as closely as possible to the
@@ -547,7 +532,7 @@ await = Monad.guard
 @
 -}
 assert
-    :: (Pretties local, Pretty global, Show local, Show global)
+    :: (ToJSON local, ToJSON global, Show local, Show global)
     => Bool
     -- ^ Condition
     -> Process global local label ()
@@ -656,25 +641,19 @@ choose = flip List.find
     checker can fail
 -}
 data ModelException =
-          forall label status
-      .   ( Show label
-          , Show status
-          , Pretty label
-          , Pretty status
-          )
-      =>  Nontermination { _history :: [(label, status)] }
+          forall value . (Show value, ToJSON value)
+      =>  Nontermination { _history :: [value] }
           -- ^ The process does not necessarily terminate because at least one
           --   branch of execution permits an infinite cycle
     |     Deadlock
           -- ^ The process deadlocked, meaning that no branch of execution
           --   successfully ran to completion
-    |     forall local . (Pretty local, Show local)
-      =>  AssertionFailed { _status :: local }
+    |     forall value . (Show value, ToJSON value)
+      =>  AssertionFailed { _status :: value }
           -- ^ The process failed to satisfy an `assert` statement
-    |     forall global label
-      .   (Pretty global, Pretty label, Show global, Show label)
+    |     forall value . (Show value, ToJSON value)
       =>  PropertyFailed
-               { _propertyHistory :: [(global, label)]
+               { _propertyHistory :: [value]
                , _reason :: PropertyFailedReason
                }
           -- ^ At least one branch of execution failed to satisfy the specified
@@ -706,7 +685,7 @@ instance Show ModelException where
         . showString "}"
     showsPrec _ PropertyFailed{ _propertyHistory, _reason } =
           showString "PropertyFailed {_propertyHistory = "
-        . shows _propertyHistory
+        . Show.showListWith shows _propertyHistory
         . showString ", _reason = "
         . shows _reason
         . showString "}"
@@ -720,43 +699,39 @@ instance Exception ModelException where
         Pretty.String.renderString
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
+prettyJSON :: ToJSON a => a -> Doc ann
+prettyJSON json = doc
+  where
+    bytes = YAML.encode json
+
+    text = case Encoding.decodeUtf8' bytes of
+        Left exception ->
+            error ("HasCal.Coroutine.prettyJSON - Internal error converting JSON to UTF-8: " <> show exception)
+        Right x ->
+            x
+
+    docs = fmap Pretty.pretty (Text.splitOn "\n" text)
+
+    doc = Pretty.concatWith (\x y -> x <> Pretty.hardline <> y) docs
+
+data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
+    deriving stock (Eq, Generic, Show)
+    deriving anyclass (Hashable, ToJSON)
+
+data PropertyInput a b = PropertyInput{ _global :: a, _label :: b }
+    deriving stock (Generic, Show)
+    deriving anyclass (ToJSON)
+
+-- TODO: Improve the Pretty instances to render JSON structure more
+-- intelligently
 instance Pretty ModelException where
-    pretty Nontermination{ _history } = Pretty.group (Pretty.flatAlt long short)
-      where
-        short = "Non-termination" <> suffix
-          where
-            suffix = case _history of
-                [] ->
-                    mempty
-
-                seens  ->
-                    " - History: " <> bars (map adapt (reverse seens))
-                  where
-                    adapt (label, _status) =
-                        commas [ pretty label, pretty _status ]
-
-        long = Pretty.align ("Non-termination" <> suffix)
-          where
-            suffix = case _history of
-                [] ->
-                    mempty
-                seens ->
-                        Pretty.hardline
-                    <>  Pretty.hardline
-                    <>  "History:"
-                    <>  Pretty.hardline
-                    <>  foldMap outer (reverse seens)
-                  where
-                    outer (label, _status) =
-                            "- "
-                        <>  Pretty.align
-                            (   "Label: "
-                            <>  pretty label
-                            <>  Pretty.hardline
-                            <>  "State: "
-                            <>  pretty _status
-                            )
-                        <>  Pretty.hardline
+    pretty Nontermination{ _history } =
+        Pretty.align
+            (   "Non-termination"
+            <>  Pretty.hardline
+            <>  Pretty.hardline
+            <>  prettyJSON (reverse _history)
+            )
 
     pretty Deadlock =
         "Deadlock"
@@ -766,50 +741,20 @@ instance Pretty ModelException where
             (   "Assertion failed"
             <>  Pretty.hardline
             <>  Pretty.hardline
-            <>  "State: "
-            <>  pretty _status
+            <>  prettyJSON _status
             )
 
     pretty PropertyFailed{ _propertyHistory, _reason } =
-        Pretty.group (Pretty.flatAlt long short)
+        Pretty.align
+            (   "Property failed: " <> reason
+            <>  Pretty.hardline
+            <>  Pretty.hardline
+            <>  prettyJSON (reverse _propertyHistory)
+            )
       where
         reason = case _reason of
             Unsatisfiable          -> "unsatisfiable"
             UnsatisfyingConclusion -> "unsatisfying conclusion"
-
-        short = "Property failed: " <> reason <> suffix
-          where
-            suffix = case _propertyHistory of
-                [] ->
-                    mempty
-
-                seens  ->
-                    " - History: " <> bars (map adapt (reverse seens))
-                  where
-                    adapt (_global, label) =
-                        commas [ pretty label, pretty _global ]
-
-        long = Pretty.align ("Property failed: " <> reason <> suffix)
-          where
-            suffix = case _propertyHistory of
-                [] -> mempty
-                seens ->
-                        Pretty.hardline
-                    <>  Pretty.hardline
-                    <>  "History:"
-                    <>  Pretty.hardline
-                    <>  foldMap outer (reverse seens)
-                  where
-                    outer (_global, label) =
-                            "- "
-                        <>  Pretty.align
-                            (   "Label: "
-                            <>  pretty label
-                            <>  Pretty.hardline
-                            <>  "State: "
-                            <>  pretty _global
-                            )
-                        <>  Pretty.hardline
 
     pretty Failure{ _message } = "Failure: " <> pretty _message
 
@@ -859,16 +804,16 @@ defaultModel = Model
 data Timeline global local label status = Timeline
     { _processStatus  :: !(Status global local)
       -- ^ This stores the internal state of the `Process`
-    , _history        :: [(label, Status global local)]
+    , _history        :: [ HistoryKey label (Status global local) ]
       -- ^ This is kept for error reporting so that if things go wrong we can
       --   report to the user what sequence of events led up to the problem
-    , _historySet     :: !(HashSet (label, Status global local))
+    , _historySet     :: !(HashSet (HistoryKey label (Status global local)))
       -- ^ This always the same as @`HashSet.fromList` _history@,
       --   but kept as a separate field for efficiently updating and querying
       --   which states we've seen so far in order to detect cycles
     , _propertyStatus :: !(HashSet status)
       -- ^ This stores the internal state of the temporal `Property`
-    , _propertyHistory :: [(global, label)]
+    , _propertyHistory :: [ PropertyInput global label ]
     }
 
 -- A lens for accessing the process status of a `Timeline`
@@ -887,8 +832,8 @@ model
        , Eq label
        , Hashable global
        , Hashable label
-       , Pretty label
-       , Pretty global
+       , ToJSON label
+       , ToJSON global
        , Show global
        , Show label
        )
@@ -928,7 +873,8 @@ model Model
                         , _local  = startingLocal
                         }
 
-                let startingPropertyInput = (startingGlobal, startingLabel)
+                let startingPropertyInput =
+                        PropertyInput startingGlobal startingLabel
 
                 let _propertyHistory = [ startingPropertyInput ]
 
@@ -938,7 +884,7 @@ model Model
                         -- The temporal `Property` only needs to return `True`
                         -- for the first output, indicating that the property
                         -- holds for the entire sequence
-                        (True, s') <- State.Lazy.runStateT (stepProperty startingPropertyInput) s
+                        (True, s') <- State.Lazy.runStateT (stepProperty (startingGlobal, startingLabel)) s
 
                         return s'
 
@@ -947,7 +893,7 @@ model Model
 
                     liftIO (Exception.throw PropertyFailed{ _propertyHistory, _reason })
 
-                let historyKey = (startingLabel, startingProcessStatus)
+                let historyKey = HistoryKey startingLabel startingProcessStatus
 
                 put $! Timeline
                     { _processStatus   = startingProcessStatus
@@ -978,7 +924,7 @@ model Model
 
                         let Status{ _global } = _processStatus
 
-                        let propertyInput = (_global, label)
+                        let propertyInput = PropertyInput _global label
 
                         let newPropertyStatus = HashSet.fromList do
                                 s <- HashSet.toList _propertyStatus
@@ -987,11 +933,11 @@ model Model
                                 -- temporal `Property` for subsequent outputs
                                 -- because we don't care if the temporal
                                 -- `Property` holds for a suffix of the behavior
-                                State.Lazy.execStateT (stepProperty propertyInput) s
+                                State.Lazy.execStateT (stepProperty (_global, label)) s
 
                         let seenKey = (label, _processStatus, newPropertyStatus)
 
-                        let historyKey = (label, _processStatus)
+                        let historyKey = HistoryKey label _processStatus
 
                         let newHistory = historyKey : _history
 
@@ -1030,57 +976,3 @@ model Model
                 display exception = do
                     Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
                     Exception.throwIO exception
-
-{-| Class used for pretty-printing the local state
-
-    The reason for not using the `Pretty` class is because the local state is
-    internally represented as nested 2-tuples, which will look ugly when
-    pretty-printed using the `Pretty` class
--}
-class Pretties a where
-    pretties :: a -> [Doc ann]
-    default pretties :: Pretty a => a -> [Doc ann]
-    pretties a = [ pretty a ]
-
-instance Pretties () where
-    pretties () = []
-
-instance (Pretties a, Pretties b) => Pretties (a, b) where
-    pretties (a, b) = pretties a <> pretties b
-
-instance Pretties Bool
-instance Pretties Char
-instance Pretties Double
-instance Pretties Float
-instance Pretties Int
-instance Pretties Int8
-instance Pretties Int16
-instance Pretties Int32
-instance Pretties Int64
-instance Pretties Integer
-instance Pretties Natural
-instance Pretties Word
-instance Pretties Word8
-instance Pretties Word16
-instance Pretties Word32
-instance Pretties Word64
-instance Pretties Void
-
-instance (Pretty key, Pretty value) => Pretties (HashMap key value) where
-    pretties m = fmap adapt (HashMap.toList m)
-      where
-        adapt (key, value) = pretty key <> ": " <> pretty value
-
-sepBy :: [Doc ann] -> Doc ann -> Doc ann
-[]           `sepBy` _   = mempty
-(doc :   []) `sepBy` _   = doc
-(doc : docs) `sepBy` sep = doc <> sep <> docs `sepBy` sep
-
-commas :: [Doc ann] -> Doc ann
-commas docs = docs `sepBy` ", "
-
-bars :: [Doc ann] -> Doc ann
-bars docs = docs `sepBy` " | "
-
-bullets :: [Doc ann] -> Doc ann
-bullets docs = map ("- " <>) docs `sepBy` Pretty.hardline

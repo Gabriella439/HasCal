@@ -40,22 +40,19 @@ import qualified Test.Tasty.HUnit as HUnit
 import qualified Control.Monad as Monad
 
 data Global d = Global { _chan :: Chan d }
-  deriving (Eq, Generic, Hashable, Show)
+  deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Chan d = Chan
   { _val :: d
   , _rdy :: Bool
   , _ack :: Bool
-  } deriving (Eq, Generic, Hashable, Show)
+  } deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Label d = Init | Send d | Rcv deriving (Eq, Generic, Hashable, Show)
+data Label d = Init | Send d | Rcv
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Data = D1 | D2
-  deriving (Bounded, Enum, Eq, Generic, Hashable, Show, Universe)
-
-instance Show d => Pretty (Global d) where pretty = unsafeViaShow
-instance Show d => Pretty (Chan   d) where pretty = unsafeViaShow
-instance Show d => Pretty (Label  d) where pretty = unsafeViaShow
+  deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 makeLenses ''Global
 makeLenses ''Chan

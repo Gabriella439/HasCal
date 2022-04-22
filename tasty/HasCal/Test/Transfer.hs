@@ -45,16 +45,12 @@ data Global = Global
     { _alice_account :: Int
     , _bob_account   :: Int
     , _account_total :: Int
-    } deriving (Eq, Generic, Hashable, Show)
+    } deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Local = Local { _money :: Int }
-    deriving (Eq, Generic, Hashable, Pretties, Show)
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Label = Transfer | A | C deriving (Eq, Generic, Hashable, Show)
-
-instance Pretty Global where pretty = unsafeViaShow
-instance Pretty Local  where pretty = unsafeViaShow
-instance Pretty Label  where pretty = unsafeViaShow
+data Label = Transfer | A | C deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
 makeLenses ''Local
