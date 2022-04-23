@@ -67,9 +67,13 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState(..), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Aeson (ToJSON(..), Value(..))
+import Data.Aeson.Key (Key)
+import Data.Aeson.KeyMap (KeyMap)
+import Data.Algorithm.Diff (PolyDiff(..))
 import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
 import Data.Hashable (Hashable(..))
+import Data.Monoid (Any(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import HasCal.Property (Check(..), Property, Universe(..))
@@ -78,15 +82,17 @@ import List.Transformer (ListT)
 import Numeric.Natural (Natural)
 import Prelude hiding (either, print)
 import Prettyprinter (Doc, Pretty(..))
+import Prettyprinter.Render.Terminal (AnsiStyle, Color(..))
 
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Lazy as State.Lazy
 import qualified Control.Monad.State.Strict as State
-import qualified Data.Aeson as Aeson
+import qualified Control.Monad.Writer as Writer
 import qualified Data.Aeson.Key as Aeson.Key
 import qualified Data.Aeson.KeyMap as Aeson.KeyMap
+import qualified Data.Algorithm.Diff as Diff
 import qualified Data.Char as Char
 import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
@@ -100,7 +106,7 @@ import qualified List.Transformer as List
 import qualified Prelude
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.String as Pretty.String
-import qualified Prettyprinter.Render.Text as Pretty.Text
+import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
 import qualified System.Exit as Exit
 import qualified Text.Show as Show
 
@@ -324,7 +330,7 @@ data Unit = Unit
     deriving anyclass (Hashable)
 
 instance ToJSON Unit where
-    toJSON Unit = toJSON ([] :: [()])
+    toJSON Unit = toJSON ([] :: [Value])
 
 data Pair a b = Pair !a !b
     deriving stock (Eq, Generic, Show)
@@ -665,6 +671,9 @@ data ModelException =
     |     Failure { _message :: Text }
           -- ^ Used by the `fail` method
 
+instance Pretty ModelException where
+    pretty = Pretty.unAnnotate . prettyModelException
+
 -- | The reason why a `PropertyFailed` exception was thrown
 data PropertyFailedReason
     = Unsatisfiable
@@ -703,51 +712,13 @@ instance Exception ModelException where
         Pretty.String.renderString
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
-prettyJSON :: ToJSON a => a -> Doc ann
-prettyJSON json = loop (Aeson.toJSON json)
-  where
-    loop (Array values) = Pretty.group (Pretty.flatAlt long short)
-      where
-        long = Pretty.align (lined (fmap process values))
+data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
+    deriving stock (Eq, Generic, Show)
+    deriving anyclass (Hashable, ToJSON)
 
-        short
-            | null values = "[ ]"
-            | otherwise   = "[ " <> commas (fmap loop values) <> " ]"
-
-        process value = "- " <> loop value
-    loop (Object keyValues) =
-        Pretty.group (Pretty.flatAlt long short)
-      where
-        long = Pretty.align (lined (fmap processLong list))
-
-        short
-            | null keyValues = "{ }"
-            | otherwise      = "{ " <> commas (fmap processShort list) <> " }"
-
-        list = do
-            (key, value) <- Aeson.KeyMap.toList keyValues
-            Monad.guard (value /= Null)
-            return (key, value)
-
-        processLong (key, value) =
-                prettyKey (Aeson.Key.toText key)
-            <>  ":"
-            <>  Pretty.hardline
-            <>  "  "
-            <>  loop value
-
-        processShort (key, value) =
-            prettyKey (Aeson.Key.toText key) <> ": " <> loop value
-    loop (String text) =
-        Pretty.pretty text
-    loop (Number scientific) =
-      case Scientific.floatingOrInteger scientific of
-          Left  double  -> Pretty.pretty @Double double
-          Right integer -> Pretty.pretty @Integer integer
-    loop (Bool bool) =
-        Pretty.pretty bool
-    loop Null =
-        mempty
+data PropertyInput a b = PropertyInput{ _global :: a, _label :: b }
+    deriving stock (Generic, Show)
+    deriving anyclass (ToJSON)
 
 prettyKey :: Text -> Doc ann
 prettyKey =
@@ -776,6 +747,181 @@ prettyKey =
             Nothing ->
                 text
 
+prettyValue :: Value -> Doc ann
+prettyValue = loop
+  where
+    loop (Array values) = Pretty.group (Pretty.flatAlt long short)
+      where
+        long = Pretty.align (lined (fmap item values))
+
+        short
+            | null values = "[ ]"
+            | otherwise   = "[ " <> commas (fmap loop values) <> " ]"
+
+        item value = "- " <> loop value
+    loop (Object keyValues) =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        long = Pretty.align (lined (fmap processLong list))
+
+        short
+            | null keyValues = "{ }"
+            | otherwise      = "{ " <> commas (fmap processShort list) <> " }"
+
+        list = Aeson.KeyMap.toList keyValues
+
+        processLong (key, value) =
+                prettyKey (Aeson.Key.toText key)
+            <>  ":"
+            <>  Pretty.hardline
+            <>  "  "
+            <>  loop value
+
+        processShort (key, value) =
+            prettyKey (Aeson.Key.toText key) <> ": " <> loop value
+    loop (String text) =
+        Pretty.pretty (show text)
+    loop (Number scientific) =
+      case Scientific.floatingOrInteger scientific of
+          Left  double  -> Pretty.pretty @Double double
+          Right integer -> Pretty.pretty @Integer integer
+    loop (Bool bool) =
+        Pretty.pretty bool
+    loop Null =
+        "null"
+
+prettyValueList :: [Value] -> Doc AnsiStyle
+prettyValueList values =
+    case values of
+        before : afters -> Pretty.group (Pretty.flatAlt long short)
+          where
+            docs = prettyValue before : diffs before afters
+
+            long = Pretty.align (lined (fmap process docs))
+
+            short
+                | null docs = "[ ]"
+                | otherwise = "[ " <> commas docs <> " ]"
+
+            process doc = "- " <> doc
+        _ -> prettyValue (toJSON values)
+  where
+    diffs :: Value -> [Value] -> [Doc AnsiStyle]
+    diffs _ [] =
+        [ ]
+    diffs before (after : afters) = do
+        snd (diff before after) : diffs after afters
+
+    diff :: Value -> Value -> (Any, Doc AnsiStyle)
+    diff (Array old ) (Array new) = do
+        let newList  = Foldable.toList new
+        let oldList = Foldable.toList old
+
+        let docs (o : ld) (n : ew) = do
+                d  <- diff o n
+                ds <- docs ld ew
+                return (d : ds)
+            docs new' _ = do
+                return (fmap (plus . prettyValue) new')
+
+        (ds, Any matching) <- Writer.listen (docs oldList newList)
+
+        ds' <- do
+            if matching
+                then do
+                    return ds
+                else do
+                    let render (First  _) = mempty
+                        render (Second a) = plus (prettyValue a)
+                        render (Both a _) = prettyValue a
+
+                    return (fmap render (Diff.getDiff oldList newList))
+
+        let short
+                | null ds' =
+                    "[ ]"
+                | otherwise =
+                    "[ " <> commas ds' <> " ]"
+
+        let long = Pretty.align (lined (fmap item ds'))
+              where
+                item d = "- " <> d
+
+        return (Pretty.group (Pretty.flatAlt long short))
+    diff (Object old) (Object new)
+        | let both = Aeson.KeyMap.intersection old new
+        , not (Aeson.KeyMap.null both) = do
+            Writer.tell (Any True)
+
+            let extras = Aeson.KeyMap.difference new old
+
+            let (extraLongs, extraShorts) =
+                    unzip (fmap extra (Aeson.KeyMap.toList extras))
+
+            let combine
+                    :: Key
+                    -> Value
+                    -> Value
+                    -> (Any, (Doc AnsiStyle, Doc AnsiStyle))
+                combine key o n = do
+                    doc <- diff o n
+                    let long =
+                                prettyKey (Aeson.Key.toText key)
+                            <>  ":"
+                            <>  Pretty.hardline
+                            <>  "  "
+                            <>  doc
+
+                    let short =
+                                prettyKey (Aeson.Key.toText key)
+                            <>  ": "
+                            <>  doc
+
+                    return (long, short)
+                        
+                        
+            let boths :: KeyMap (Any, (Doc AnsiStyle, Doc AnsiStyle))
+                boths = Aeson.KeyMap.intersectionWithKey combine old new
+
+            (bothLongs, bothShorts) <- do
+                fmap unzip (Monad.sequence (Aeson.KeyMap.elems boths))
+
+            let longs  = extraLongs  <> bothLongs
+            let shorts = extraShorts <> bothShorts
+
+            let long = Pretty.align (lined longs)
+
+            let short
+                    | null shorts =
+                        "{ }"
+                    | otherwise =
+                        "{ " <> commas shorts <> " }"
+
+            return (Pretty.group (Pretty.flatAlt long short))
+      where
+        extra (key, value) =
+            ( plus
+                (   prettyKey (Aeson.Key.toText key)
+                <>  ":"
+                <>  Pretty.hardline
+                <>  "  "
+                <>  prettyValue value
+                )
+            , plus
+                (   prettyKey (Aeson.Key.toText key)
+                <>  ": "
+                <>  prettyValue value
+                )
+            )
+    diff old new
+        | old == new = do
+            Writer.tell (Any True)
+            return (prettyValue new)
+        | otherwise = do
+            return (plus (prettyValue new))
+    
+    plus  = Pretty.annotate (Pretty.Terminal.color Green)
+
 lined :: Foldable list => list (Doc ann) -> Doc ann
 lined = Pretty.concatWith append
   where
@@ -786,47 +932,36 @@ commas = Pretty.concatWith append
   where
     append x y = x <> ", " <> y
 
-data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
-    deriving stock (Eq, Generic, Show)
-    deriving anyclass (Hashable, ToJSON)
+prettyModelException :: ModelException -> Doc AnsiStyle
+prettyModelException  Nontermination{ _history } =
+    Pretty.align
+        (   "Non-termination"
+        <>  Pretty.hardline
+        <>  Pretty.hardline
+        <>  prettyValueList (fmap toJSON (reverse _history))
+        )
+prettyModelException Deadlock =
+    "Deadlock"
+prettyModelException AssertionFailed{ _status } =
+    Pretty.align
+        (   "Assertion failed"
+        <>  Pretty.hardline
+        <>  Pretty.hardline
+        <>  prettyValue (toJSON _status)
+        )
+prettyModelException PropertyFailed{ _propertyHistory, _reason } =
+    Pretty.align
+        (   "Property failed: " <> reason
+        <>  Pretty.hardline
+        <>  Pretty.hardline
+        <>  prettyValueList (fmap toJSON (reverse _propertyHistory))
+        )
+  where
+    reason = case _reason of
+        Unsatisfiable          -> "unsatisfiable"
+        UnsatisfyingConclusion -> "unsatisfying conclusion"
 
-data PropertyInput a b = PropertyInput{ _global :: a, _label :: b }
-    deriving stock (Generic, Show)
-    deriving anyclass (ToJSON)
-
-instance Pretty ModelException where
-    pretty Nontermination{ _history } =
-        Pretty.align
-            (   "Non-termination"
-            <>  Pretty.hardline
-            <>  Pretty.hardline
-            <>  prettyJSON (reverse _history)
-            )
-
-    pretty Deadlock =
-        "Deadlock"
-
-    pretty AssertionFailed{ _status } =
-        Pretty.align
-            (   "Assertion failed"
-            <>  Pretty.hardline
-            <>  Pretty.hardline
-            <>  prettyJSON _status
-            )
-
-    pretty PropertyFailed{ _propertyHistory, _reason } =
-        Pretty.align
-            (   "Property failed: " <> reason
-            <>  Pretty.hardline
-            <>  Pretty.hardline
-            <>  prettyJSON (reverse _propertyHistory)
-            )
-      where
-        reason = case _reason of
-            Unsatisfiable          -> "unsatisfiable"
-            UnsatisfyingConclusion -> "unsatisfying conclusion"
-
-    pretty Failure{ _message } = "Failure: " <> pretty _message
+prettyModelException Failure{ _message } = "Failure: " <> pretty _message
 
 {-| A `Model` represents the  model to check, alongside all model-checking
     options
@@ -1042,7 +1177,6 @@ model Model
                 | debug     = Exception.handle display
                 | otherwise = id
               where
-                display :: ModelException -> IO a
                 display exception = do
-                    Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
+                    Pretty.Terminal.putDoc (prettyModelException exception <> "\n")
                     Exception.throwIO (Exit.ExitFailure 1)
