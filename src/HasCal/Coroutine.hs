@@ -101,6 +101,7 @@ import qualified Prelude
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.String as Pretty.String
 import qualified Prettyprinter.Render.Text as Pretty.Text
+import qualified System.Exit as Exit
 import qualified Text.Show as Show
 
 hoistListT
@@ -835,8 +836,8 @@ data Model global label = Model
       -- ^ When `True`, throw a `Nontermination` exception if any cycles are
       -- detected or a `Deadlock` exception if no execution branch terminates
     , debug :: Bool
-      -- ^ When `True`, pretty-print any exception before throwing the
-      --   exception
+      -- ^ Set this to `True` if you want to pretty-print the `ModelException`
+      --   and instead throw @`ExitFailure` 1@ in its place
     , coroutine :: Coroutine global label
       -- ^ `Coroutine` to check
     , property :: Property (global, label) Bool
@@ -1044,4 +1045,4 @@ model Model
                 display :: ModelException -> IO a
                 display exception = do
                     Pretty.Text.putDoc (pretty (exception :: ModelException) <> "\n")
-                    Exception.throwIO exception
+                    Exception.throwIO (Exit.ExitFailure 1)
