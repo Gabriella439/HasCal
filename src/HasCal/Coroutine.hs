@@ -750,16 +750,30 @@ prettyJSON json = loop (Aeson.toJSON json)
 
 prettyKey :: Text -> Doc ann
 prettyKey =
-    Pretty.pretty . capitalize . Text.concatMap space . Text.dropWhile (== '_')
+      Pretty.pretty
+    . spaces
+    . Text.concat
+    . fmap capitalizeWord
+    . Text.splitOn "_"
+    . Text.dropWhile (== '_')
   where
     space c
         | Char.isUpper c = Text.pack [ ' ', c ]
         | otherwise      = Text.singleton c
 
-    capitalize text =
+    capitalizeWord text =
         case Text.uncons text of
-            Just (t, ext) -> Text.cons (Char.toUpper t) ext
-            Nothing       -> text
+            Just (t, ext) ->
+                Text.cons (Char.toUpper t) ext
+            Nothing ->
+                text
+
+    spaces text =
+        case Text.uncons text of
+            Just (t, ext) ->
+                Text.cons (Char.toUpper t) (Text.concatMap space ext)
+            Nothing ->
+                text
 
 lined :: Foldable list => list (Doc ann) -> Doc ann
 lined = Pretty.concatWith append
