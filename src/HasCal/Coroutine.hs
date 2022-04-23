@@ -84,13 +84,15 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Lazy as State.Lazy
 import qualified Control.Monad.State.Strict as State
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Aeson.Key
+import qualified Data.Aeson.KeyMap as Aeson.KeyMap
+import qualified Data.Char as Char
 import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Encoding
-import qualified Data.Yaml as YAML
 import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
 import qualified List.Transformer as List
@@ -700,19 +702,47 @@ instance Exception ModelException where
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
 prettyJSON :: ToJSON a => a -> Doc ann
-prettyJSON json = doc
+prettyJSON json = loop (Aeson.toJSON json)
   where
-    bytes = YAML.encode json
+    loop (Array values) =
+        Pretty.align (lined (fmap process values))
+      where
+        process value = "• " <> loop value
+    loop (Object keyValues) = Pretty.align (lined (fmap process list))
+      where
+        list = do
+            (key, value) <- Aeson.KeyMap.toList keyValues
+            Monad.guard (value /= Null)
+            return (key, value)
 
-    text = case Encoding.decodeUtf8' bytes of
-        Left exception ->
-            error ("HasCal.Coroutine.prettyJSON - Internal error converting JSON to UTF-8: " <> show exception)
-        Right x ->
-            x
+        process (key, value) =
+            prettyKey (Aeson.Key.toText key) <> ": " <> loop value
+    loop (String text) =
+        Pretty.pretty text
+    loop (Number scientific) =
+        Pretty.pretty (show scientific)
+    loop (Bool bool) =
+        Pretty.pretty bool
+    loop Null =
+        mempty
 
-    docs = fmap Pretty.pretty (Text.splitOn "\n" text)
+prettyKey :: Text -> Doc ann
+prettyKey =
+    Pretty.pretty . capitalize . Text.concatMap space . Text.dropWhile (== '_')
+  where
+    space c
+        | Char.isUpper c = Text.pack [ ' ', c ]
+        | otherwise      = Text.singleton c
 
-    doc = Pretty.concatWith (\x y -> x <> Pretty.hardline <> y) docs
+    capitalize text =
+        case Text.uncons text of
+            Just (t, ext) -> Text.cons (Char.toUpper t) ext
+            Nothing       -> text
+
+lined :: Foldable list => list (Doc ann) -> Doc ann
+lined = Pretty.concatWith append
+  where
+    append x y = x <> Pretty.hardline <> y
 
 data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
     deriving stock (Eq, Generic, Show)
@@ -722,8 +752,6 @@ data PropertyInput a b = PropertyInput{ _global :: a, _label :: b }
     deriving stock (Generic, Show)
     deriving anyclass (ToJSON)
 
--- TODO: Improve the Pretty instances to render JSON structure more
--- intelligently
 instance Pretty ModelException where
     pretty Nontermination{ _history } =
         Pretty.align
