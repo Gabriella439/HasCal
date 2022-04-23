@@ -20,6 +20,7 @@ common common
                     , prettyprinter
                     , profunctors
                     , safe-exceptions
+                    , scientific
                     , text
                     , transformers
                     , unordered-containers

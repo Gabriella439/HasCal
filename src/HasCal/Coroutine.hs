@@ -92,6 +92,7 @@ import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
+import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
@@ -704,23 +705,44 @@ instance Exception ModelException where
 prettyJSON :: ToJSON a => a -> Doc ann
 prettyJSON json = loop (Aeson.toJSON json)
   where
-    loop (Array values) =
-        Pretty.align (lined (fmap process values))
+    loop (Array values) = Pretty.group (Pretty.flatAlt long short)
       where
-        process value = "• " <> loop value
-    loop (Object keyValues) = Pretty.align (lined (fmap process list))
+        long = Pretty.align (lined (fmap process values))
+
+        short
+            | null values = "[ ]"
+            | otherwise   = "[ " <> commas (fmap loop values) <> " ]"
+
+        process value = "- " <> loop value
+    loop (Object keyValues) =
+        Pretty.group (Pretty.flatAlt long short)
       where
+        long = Pretty.align (lined (fmap processLong list))
+
+        short
+            | null keyValues = "{ }"
+            | otherwise      = "{ " <> commas (fmap processShort list) <> " }"
+
         list = do
             (key, value) <- Aeson.KeyMap.toList keyValues
             Monad.guard (value /= Null)
             return (key, value)
 
-        process (key, value) =
+        processLong (key, value) =
+                prettyKey (Aeson.Key.toText key)
+            <>  ":"
+            <>  Pretty.hardline
+            <>  "  "
+            <>  loop value
+
+        processShort (key, value) =
             prettyKey (Aeson.Key.toText key) <> ": " <> loop value
     loop (String text) =
         Pretty.pretty text
     loop (Number scientific) =
-        Pretty.pretty (show scientific)
+      case Scientific.floatingOrInteger scientific of
+          Left  double  -> Pretty.pretty @Double double
+          Right integer -> Pretty.pretty @Integer integer
     loop (Bool bool) =
         Pretty.pretty bool
     loop Null =
@@ -743,6 +765,11 @@ lined :: Foldable list => list (Doc ann) -> Doc ann
 lined = Pretty.concatWith append
   where
     append x y = x <> Pretty.hardline <> y
+
+commas :: Foldable list => list (Doc ann) -> Doc ann
+commas = Pretty.concatWith append
+  where
+    append x y = x <> ", " <> y
 
 data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
     deriving stock (Eq, Generic, Show)
