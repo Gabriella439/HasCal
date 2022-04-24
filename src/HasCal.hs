@@ -35,8 +35,9 @@
 
 module HasCal
     ( -- * Internal re-exports
-      module HasCal.Coroutine
+      module HasCal.Expression
     , module HasCal.Property
+    , module HasCal.Coroutine
 
       -- * External re-exports
     , module Lens.Micro.Platform
@@ -61,6 +62,7 @@ import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
 import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
+import HasCal.Expression
 import HasCal.Property
 import HasCal.Coroutine
 import Lens.Micro.Platform

@@ -1,6 +1,5 @@
 {-# LANGUAGE BangPatterns              #-}
 {-# LANGUAGE BlockArguments            #-}
-{-# LANGUAGE DefaultSignatures         #-}
 {-# LANGUAGE DeriveAnyClass            #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE DerivingStrategies        #-}
@@ -31,9 +30,6 @@ module HasCal.Property
     , Check(..)
     , check
     , checkList
-
-    -- * Universe
-    , Universe(..)
     ) where
 
 import Control.Applicative (liftA2)
@@ -43,6 +39,7 @@ import Control.Monad.Trans.State (State, StateT(..))
 import Data.Hashable (Hashable(..))
 import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
+import HasCal.Expression (Universe(..), (==>))
 import Prelude hiding (id, (.))
 
 import qualified Control.Monad as Monad
@@ -202,36 +199,8 @@ data Pair a b = Pair !a !b
     deriving stock (Eq, Generic)
     deriving anyclass (Hashable)
 
-{-| A type whose values can be enumerated
-
-    Note that `universe` should be the same thing as
-    @[ `minBound` .. `maxBound` ]@ for a type that implements `Bounded` and
-    `Enum`, but sometimes it's easier or more efficient to define instances of
-    this class directly
-
-    For most types, the easiest way to implement `Universe` is to
-    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the @DeriveAnyClass@
-    extension
--}
-class Universe a where
-    universe :: [a]
-    default universe :: (Bounded a, Enum a) => [a]
-    universe = [ minBound .. maxBound ]
-
-instance Universe () where
-    universe = [()]
-
 instance (Universe a, Universe b) => Universe (Pair a b) where
     universe = liftA2 Pair universe universe
-
-instance Universe Bool where
-    universe = [ False, True ]
-
-data Prime a = Zero | One !a | Two !a !a
-    deriving (Eq, Generic, Hashable)
-
-instance Universe a => Universe (Prime a) where
-    universe = Zero : fmap One universe <> liftA2 Two universe universe
 
 {-| This property outputs `True` if the current input or any future input is
     `True`, and outputs `False` otherwise
@@ -252,8 +221,6 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
-  where
-    p ==> q = not p || q
 
 {-| This property outputs each element with the following element (or `Nothing`
     if there is no following element)
@@ -272,6 +239,12 @@ prime = Property Zero step
         f  Zero      = (Nothing, One a0)
         f (One a1  ) = (Just (a0, a1), Two a0 a1)
         f (Two a1 _) = (Just (a0, a1), Two a0 a1)
+
+data Prime a = Zero | One !a | Two !a !a
+    deriving (Eq, Generic, Hashable)
+
+instance Universe a => Universe (Prime a) where
+    universe = Zero : fmap One universe <> liftA2 Two universe universe
 
 {-| This is a more ergonomic version of `prime` for the common case where you
     want to compare each temporal input against the next input using an

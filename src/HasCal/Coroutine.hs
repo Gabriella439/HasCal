@@ -37,19 +37,6 @@ module HasCal.Coroutine
     , die
     , print
 
-    -- * TLA+ expressions
-    , forall_
-    , exists_
-    , (==>)
-    , (<=>)
-    , boolean
-    , (-->)
-    , (|->)
-    , domain
-    , range
-    , subset
-    , choose
-
     -- * Model checking
     , Model(..)
     , defaultModel
@@ -70,13 +57,13 @@ import Data.Aeson (ToJSON(..), Value(..))
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap (KeyMap)
 import Data.Algorithm.Diff (PolyDiff(..))
-import Data.HashMap.Strict (HashMap)
 import Data.HashSet (HashSet)
 import Data.Hashable (Hashable(..))
 import Data.Monoid (Any(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import HasCal.Property (Check(..), Property, Universe(..))
+import HasCal.Expression (Universe(..), (==>))
+import HasCal.Property (Check(..), Property)
 import Lens.Micro.Platform (Lens')
 import List.Transformer (ListT)
 import Numeric.Natural (Natural)
@@ -95,9 +82,7 @@ import qualified Data.Aeson.KeyMap as Aeson.KeyMap
 import qualified Data.Algorithm.Diff as Diff
 import qualified Data.Char as Char
 import qualified Data.Foldable as Foldable
-import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
-import qualified Data.List as List
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified HasCal.Property as Property
@@ -564,89 +549,6 @@ die _message = Exception.throw Failure{ _message }
 print :: Show a => a -> Process global local label ()
 print a = liftIO (Prelude.print a)
 
-{-| Verify that all elements satisfy the given predicate, like @\A@ in TLA+
-
-    `forall_` is like `all` but with the arguments `flip`ped.
--}
-forall_ :: Foldable list => list a -> (a -> Bool) -> Bool
-forall_ = flip all
-
-{-| Verify that any element satisfies the given predicate, like @\E@ in TLA+
-
-    `forall_` is  like `any` but with the arguments `flip`ped
--}
-exists_ :: Foldable list => list a -> (a -> Bool) -> Bool
-exists_ = flip any
-
-{-| Logical implication, like @=>@ in TLA+
-
-    @p `==>` q@ is the same as \"if @p@ then @q@\"
--}
-(==>) :: Bool -> Bool -> Bool
-p ==> q = not p || q
-
-{-| Bidirectional logical implication, like @<=>@ in TLA+
-
-    @p `<=>` q@ is the same as \"if and only if @p@ then @q@\"
--}
-(<=>) :: Bool -> Bool -> Bool
-p <=> q = (p ==> q) && (q ==> p)
-
-infixr 1 ==>, <=>
-
-{-| All possible boolean values, like the @BOOLEAN@ set in TLA+
-
-@
-`boolean` = `universe` @`Bool`
-@
--}
-boolean :: [Bool]
-boolean = universe @Bool
-
--- | A function set, like the @->@ operator in TLA+
-(-->)
-    :: (Traversable domain, Applicative range, Eq key, Hashable key)
-    => domain key -> range value -> range (HashMap key value)
-keys --> values =
-    fmap (HashMap.fromList . Foldable.toList) (traverse process keys)
-  where
-    process key = fmap ((,) key) values
-
--- | A function set, like the @|->@ operator in TLA+
-(|->)
-    :: (Foldable list, Functor list, Eq key, Hashable key)
-    => list key -> (key -> value) -> HashMap key value
-keys |-> function = HashMap.fromList (Foldable.toList (fmap adapt keys))
-  where
-    adapt key = (key, function key)
-
-{-| The domain of a function set, like the @DOMAIN@ function in TLA+
-
-    `domain` is a synonym for `HashMap.keys`.
--}
-domain :: HashMap key value -> [key]
-domain = HashMap.keys
-
-{-| The range of a function set, like the @RANGE@ function that projects
-    commonly define
-
-    `range` is a synonym for `HashMap.elems`.
--}
-range :: HashMap key value -> [value]
-range = HashMap.elems
-
--- | The powerset of a list, like the @SUBSET@ function in TLA+
-subset :: [a] -> [[a]]
-subset = Monad.filterM (\_ -> [False, True])
-
-{-| Find the first matching element, like the @CHOOSE@ function in TLA+ except
-    that this will return a `Nothing` instead of throwing an exception
-
-    `choose` is like `List.find`, but with the arguments `flip`ped.
--}
-choose :: Foldable list => list a -> (a -> Bool) -> Maybe a
-choose = flip List.find
-
 {-| The `ModelException` type represents all of the ways in which the model
     checker can fail
 -}
@@ -972,7 +874,7 @@ data Model global label = Model
       -- detected or a `Deadlock` exception if no execution branch terminates
     , debug :: Bool
       -- ^ Set this to `True` if you want to pretty-print the `ModelException`
-      --   and instead throw @`ExitFailure` 1@ in its place
+      --   and instead throw @`Exit.ExitFailure` 1@ in its place
     , coroutine :: Coroutine global label
       -- ^ `Coroutine` to check
     , property :: Property (global, label) Bool
