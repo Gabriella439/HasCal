@@ -65,5 +65,4 @@ import HasCal.Property
 import HasCal.Coroutine
 import Lens.Micro.Platform
 
--- TODO: Add highlighting to pretty-printed output
 -- TODO: Associate local state with process names
