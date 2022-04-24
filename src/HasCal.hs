@@ -14,24 +14,117 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE UndecidableInstances       #-}
 
-{-| This documentation assumes that you are already familiar with PlusCal and
-    TLA+.  If not, then you will probably want to read at least one of the
-    following resources first:
-
-    * <https://learntla.com/introduction/ Learn TLA+>
-    * <https://lamport.azurewebsites.net/tla/p-manual.pdf A PlusCal User's Manual>
-
-    This package implements PlusCal as an embedded domain-specific language
-    (i.e. eDSL) in Haskell.  In other words, this does not compile to any
-    intermediate or external language; the whole thing is implemented in pure
-    Haskell.
-
-    "HasCal.Coroutine" provides the API for creating and model-checking
-    concurrent `Coroutine`s
-
-    "HasCal.Property" provides the API for creating and checking temporal
-    `Property`s
--}
+-- | This documentation assumes that you are already familiar with PlusCal and
+-- TLA+.  If not, then you will probably want to read at least one of the
+-- following resources first:
+--
+-- * <https://learntla.com/introduction/ Learn TLA+>
+-- * <https://lamport.azurewebsites.net/tla/p-manual.pdf A PlusCal User's Manual>
+--
+-- This package implements PlusCal as an embedded domain-specific language
+-- (i.e. eDSL) in Haskell.  In other words, this does not compile to any
+-- intermediate or external language; the whole thing is implemented in pure
+-- Haskell.
+--
+-- "HasCal.Coroutine" provides the API for creating and model-checking
+-- concurrent `Coroutine`s
+--
+-- "HasCal.Property" provides the API for creating and checking temporal
+-- `Property`s
+--
+-- For example, you can translate this PlusCal program from the \"Learn TLA+\"
+-- guide:
+--
+-- > ---- MODULE Transfer ----
+-- > EXTENDS Naturals, TLC
+-- >
+-- > (* --algorithm transfer
+-- > variables alice_account = 10, bob_account = 10,
+-- >           account_total = alice_account + bob_account;
+-- >               
+-- > process Transfer \in 1..2
+-- >   variable money \in 1..20;
+-- > begin             
+-- > Transfer:         
+-- >   if alice_account >= money then
+-- >     A: alice_account := alice_account - money;
+-- >        bob_account := bob_account + money;
+-- > end if;       
+-- > C: assert alice_account >= 0;
+-- > end process               
+-- >                   
+-- > end algorithm *)
+-- > 
+-- > MoneyInvariant == alice_account + bob_account = account_total
+-- >   
+-- > ====  
+-- 
+-- … into a Haskell program that is also model-checked within Haskell:
+-- 
+-- @
+-- {-# LANGUAGE BlockArguments  #-}
+-- {-# LANGUAGE DeriveAnyClass  #-}
+-- {-# LANGUAGE DeriveGeneric   #-}
+-- {-# LANGUAGE RecordWildCards #-}
+-- {-# LANGUAGE TemplateHaskell #-}
+--
+-- import "Control.Monad" (`Control.Monad.when`)
+-- import "Prelude" hiding ((`Prelude..`))
+-- import "HasCal"
+--
+-- data Global = Global
+--     { _alice_account :: `Int`
+--     , _bob_account   :: `Int`
+--     , _account_total :: `Int`
+--     } deriving (`Eq`, `Generic`, `Hashable`, `Show`, `ToJSON`)
+--
+-- data Local = Local { _money :: `Int` }
+--     deriving (`Eq`, `Generic`, `Hashable`, `Show`, `ToJSON`)
+--
+-- data Label = Transfer | A | C deriving (`Eq`, `Generic`, `Hashable`, `Show`, `ToJSON`)
+--
+-- `Control.TH.makeLenses` ''Global
+-- `Control.TH.makeLenses` ''Local
+--
+-- main :: `IO` ()
+-- main = do
+--     let transfer _ = `Coroutine`
+--         { startingLabel = Transfer
+--
+--         , startingLocals = do
+--             _money <- [ 1 .. 20 ]
+--             `return` Local{..}
+--
+--         , process = do
+--             _money <- `use` (local.money)
+--
+--             alice_old <- `use` (global.alice_account)
+--
+--             when (alice_old `>=` _money) do
+--                 `yield` A
+--                 global.alice_account `-=` _money
+--                 global.bob_account   `+=` _money
+--
+--             `yield` C
+--             alice_new <- `use` (global.alice_account)
+--             `assert` (alice_new `>=` 0)
+--         }
+--
+--     `model` `defaultModel`
+--         { startingGlobals = do
+--             let _alice_account = 10
+--             let _bob_account   = 10
+--             let _account_total = _alice_account `+` _bob_account
+--             `return` Global{..}
+--
+--         , coroutine = `traverse` transfer [ 1 .. 2 ]
+--
+--         , property =
+--             let predicate (Global{..}, _) =
+--                     _alice_account `+` _bob_account `==` _account_total
+--             in  `always` . `arr` predicate
+--         }
+-- @
 
 module HasCal
     ( -- * Internal re-exports
