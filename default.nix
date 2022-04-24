@@ -7,15 +7,29 @@ let
   overlay = pkgsNew: pkgsOld: {
     haskellPackages = pkgsOld.haskellPackages.override (old : {
       overrides =
-        pkgsNew.lib.composeExtensions
+        pkgsNew.lib.fold pkgsNew.lib.composeExtensions
           (old.overrides or (_: _: { }))
-          (pkgsNew.haskell.lib.packageSourceOverrides {
-            HasCal = ./.;
-          });
+          [ (pkgsNew.haskell.lib.packageSourceOverrides {
+              HasCal = ./.;
+            })
+            (haskellPackagesNew: haskellPackagesOld: {
+              doctest-parallel =
+                pkgsNew.haskell.lib.dontCheck haskellPackagesOld.doctest-parallel;
+
+              HasCal =
+                pkgsNew.haskell.lib.overrideCabal
+                  haskellPackagesOld.HasCal
+                  (_: {
+                    testTarget = "tasty";
+                  });
+            })
+          ];
     });
   };
 
-  pkgs = import nixpkgs { config = { }; overlays = [ overlay ]; };
+  config = { allowBroken = true; };
+
+  pkgs = import nixpkgs { inherit config; overlays = [ overlay ]; };
 
 in
   pkgs.haskellPackages.HasCal

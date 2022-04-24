@@ -47,6 +47,13 @@ import qualified Control.Monad.Trans.State as State
 import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Strict as HashMap
 
+{- $setup
+
+   >>> :m -Prelude
+   >>> import Prelude hiding ((.), id)
+   >>> import HasCal
+-}
+
 {-| A temporal `Property` is a stateful transformation from an @input@ to an
     @output@
 
