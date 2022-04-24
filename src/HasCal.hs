@@ -26,14 +26,22 @@
 -- intermediate or external language; the whole thing is implemented in pure
 -- Haskell.
 --
--- "HasCal.Coroutine" provides the API for creating and model-checking
--- concurrent `Coroutine`s
+-- The package is organized into the following modules, which you should study
+-- in order if you want to learn more:
 --
--- "HasCal.Property" provides the API for creating and checking temporal
--- `Property`s
+-- "HasCal.Coroutine" provides the domain-specific language for creating and
+-- and model-checking concurrent `Coroutine`s
 --
--- For example, you can translate this PlusCal program from the \"Learn TLA+\"
--- guide:
+-- "HasCal.Property" provides the the domain-specific language for creating and
+-- checking temporal `Property`s
+--
+-- "HasCal.Expression" provides assorted utilities for non-temporal expressions
+--
+-- … and you can import this module if you want an \"all-in-one\" import for
+-- convenience.
+--
+-- As a complete example, you can translate this PlusCal program from the
+-- \"Learn TLA+\" guide:
 --
 -- > ---- MODULE Transfer ----
 -- > EXTENDS Naturals, TLC

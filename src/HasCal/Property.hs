@@ -64,6 +64,8 @@ import qualified Data.HashMap.Strict as HashMap
 
     You can create a `Property` using:
 
+    * `arr` - Lift a pure function from an @input@ to an @output@ into the
+      equivalent `Property`
     * `eventually` - A `Property` that @output@s `True` if the @input@ will
        `eventually` be `True` (either now or in the future)
     * `always` - A `Property` that @output@s `True` if the @input@ will `always`
@@ -211,12 +213,22 @@ instance (Universe a, Universe b) => Universe (Pair a b) where
 
 {-| This property outputs `True` if the current input or any future input is
     `True`, and outputs `False` otherwise
+
+    This is equivalent to the @<>@ temporal operator from TLA+
+
+    >>> infer eventually [ False, True, False ]
+    [True,True,False]
 -}
 eventually :: Property Bool Bool
 eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
 
 {-| This property outputs `False` if the current input or any future input is
     `False`, and outputs `True` otherwise
+
+    This is equivalent to the @[]@ temporal operator from TLA+
+
+    >>> infer always [ True, False, True ]
+    [False,False,True]
 -}
 always :: Property Bool Bool
 always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
@@ -225,6 +237,13 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
     followed by a `True` output from @g@
 
     > f ~> g = always . (liftA2 (==>) f (eventually . g))
+
+    This is equivalent to the @~>@ temporal operator from TLA+
+
+    >>> infer (arr even ~> arr odd) [ 1, 2, 3, 4 ]
+    [False,False,False,False]
+    >>> infer (arr even ~> arr odd) [ 0, 1, 2, 3 ]
+    [True,True,True,True]
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
@@ -425,6 +444,10 @@ instance Profunctor Check where
 
     See the documentation for `Check` for more details on how to use a
     `Check`
+
+    This is mostly used to implement `HasCal.Coroutine.model`, but you
+    can use this to implement your own efficient temporal property
+    checker
 -}
 check :: Property input output -> Check input output
 check (Property s k) = Check s k'
@@ -448,6 +471,9 @@ check (Property s k) = Check s k'
 
     … except that `checkList` processes the list in a single forward pass
     (unlike `infer`)
+
+    >>> checkList eventually [(False, True), (True, True), (False, False)]
+    True
 -}
 checkList :: Eq output => Property input output -> [(input, output)] -> Bool
 checkList temporal =
