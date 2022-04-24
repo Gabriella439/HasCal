@@ -115,7 +115,7 @@ instance Applicative (Property a) where
 
         k a = State.state step
           where
-            step (Pair l r) = (f x, Pair l' r')
+            step !(Pair l r) = (f x, Pair l' r')
               where
                 (f, l') = State.runState (kL a) l
                 (x, r') = State.runState (kR a) r
@@ -175,7 +175,7 @@ instance Category Property where
 
         k a = State.state step
           where
-            step (Pair l r) = (c, Pair l' r')
+            step !(Pair l r) = (c, Pair l' r')
               where
                 (b, r') = State.runState (kR a) r
                 (c, l') = State.runState (kL b) l
@@ -371,7 +371,7 @@ instance Applicative (Check a) where
 
         k a = StateT step
           where
-            step (Pair l r) = do
+            step !(Pair l r) = do
                 (f, l') <- State.runStateT (kL a) l
                 (x, r') <- State.runStateT (kR a) r
                 return (f x, Pair l' r')
@@ -431,7 +431,7 @@ instance Category Check where
 
         k a = StateT step
           where
-            step (Pair l r) = do
+            step !(Pair l r) = do
                 (b, r') <- State.runStateT (kR a) r
                 (c, l') <- State.runStateT (kL b) l
                 return (c, Pair l' r')

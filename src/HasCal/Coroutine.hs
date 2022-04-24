@@ -1160,7 +1160,7 @@ model Model
 
                         Monad.when (HashSet.member seenKey seen) empty
 
-                        lift (State.put $! HashSet.insert seenKey seen)
+                        lift (put $! HashSet.insert seenKey seen)
 
                         put $! Timeline
                             { _processStatus
