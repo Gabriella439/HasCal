@@ -59,7 +59,6 @@ makeLenses ''Chan
 
 init :: Universe d => Process (Global d) () (Label d) ()
 init = do
-  yield Init
   global.chan.ack <~ use (global.chan.rdy)
   Monad.forever next
 
