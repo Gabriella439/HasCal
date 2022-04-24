@@ -92,8 +92,18 @@ import qualified Prelude
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.String as Pretty.String
 import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
+import qualified Prettyprinter.Render.Text as Pretty.Text
+import qualified System.Console.ANSI as ANSI
 import qualified System.Exit as Exit
+import qualified System.IO as IO
 import qualified Text.Show as Show
+
+{- $setup
+
+   >>> :m -Prelude
+   >>> import Prelude hiding ((.), id)
+   >>> import HasCal
+-}
 
 hoistListT
     :: Functor m
@@ -346,14 +356,14 @@ instance (ToJSON a, ToJSON b) => ToJSON (Pair a b) where
     This potentially yields control to other `Process`es.
 
     If the exact same label and state have been reached before then the
-    model checker behavior depends on whether you enable the `termination`
+    model checker behavior depends on whether you enable the termination
     check:
 
-    * If you enable the `termination` check then the model checker will
+    * If you enable the termination check then the model checker will
       `Exception.throw` a `Nontermination` exception since revisiting the same
       state indicates a simulation path that permits an infinite loop
 
-    * If you disable the `termination` check then the model checker will still
+    * If you disable the termination check then the model checker will still
       end the current simulation branch since it has already visited this
       state before
 
@@ -400,8 +410,8 @@ skip = mempty
 {-| Non-deterministically simulate multiple subroutines, like an @either@
     statement in PlusCal
 
-    This is a synonym for `Foldable.asum`, but with a `Process`-specific type
-    signature.
+    This is a synonym for @"Data.Foldable".`Foldable.asum`@, but with a
+    `Process`-specific type signature.
 
     The model checker will explore all branches, succeeding only if all branches
     succeed.
@@ -501,8 +511,8 @@ while condition body = do
 {-| Only permit the current state transition if the predicate is `True`, like
     an @await@ statement in PlusCal
 
-    This is a synonym for `Monad.guard`, but with a `Process`-specific type
-    signature.
+    This is a synonym for @"Control.Monad".`Monad.guard`@, but with a
+    `Process`-specific type signature.
 
 @
 `await` `False` = `empty`
@@ -933,6 +943,42 @@ processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
 
     If you want to check more than one `Coroutine`, then combine those
     `Coroutine`s using `Applicative` operations or @ApplicativeDo@ notation
+
+    >>> model defaultModel  -- The default model has no valid execution branches
+    *** Exception: Deadlock
+
+    >>> -- An example coroutine with one execution branch that does nothing
+    >>> exampleCoroutine = Coroutine{ startingLabel = (), startingLocals = pure (), process = mempty }
+    >>> model defaultModel{ coroutine = exampleCoroutine }  -- Success
+
+
+    >>> -- Create a coroutine that never terminates
+    >>> endlessCoroutine = Coroutine{ startingLabel = False, startingLocals = pure (), process = while (pure True) (yield True) }
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True }
+    *** Exception: Nontermination {_history = [HistoryKey {_label = True, _status = Status {_global = (), _local = ()}},HistoryKey {_label = True, _status = Status {_global = (), _local = ()}},HistoryKey {_label = False, _status = Status {_global = (), _local = ()}}]}
+
+    >>> -- Enable debugging output for clarity
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True, debug = True }
+    Non-termination
+    ...
+    - { Label: False, Status: { Global: [ ], Local: [ ] } }
+    - { Label: True, Status: { Global: [ ], Local: [ ] } }
+    - { Label: True, Status: { Global: [ ], Local: [ ] } }
+    *** Exception: ExitFailure 1
+
+    >>> -- Disable the termination checker if desired
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True, debug = True, termination = False }
+
+    >>> -- Check a non-trivial property that succeeds
+    >>> exampleProperty = eventually . always . arr snd
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = exampleProperty, debug = True, termination = False }
+
+    >>> -- Check a non-trivial property that fails
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = always . arr (not . snd), debug = True, termination = False }
+    Property failed: unsatisfiable
+    ...
+    [ { Global: [ ], Label: False }, { Global: [ ], Label: True } ]
+    *** Exception: ExitFailure 1
 -}
 model
     :: ( Eq global
@@ -1080,5 +1126,13 @@ model Model
                 | otherwise = id
               where
                 display exception = do
-                    Pretty.Terminal.putDoc (prettyModelException exception <> "\n")
+                    terminal <- ANSI.hSupportsANSI IO.stdout
+
+                    let putDoc =
+                            if terminal
+                            then Pretty.Terminal.putDoc
+                            else Pretty.Text.putDoc
+
+                    putDoc (prettyModelException exception <> "\n")
+
                     Exception.throwIO (Exit.ExitFailure 1)
