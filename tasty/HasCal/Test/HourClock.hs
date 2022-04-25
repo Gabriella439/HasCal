@@ -68,7 +68,7 @@ test_hourClock = HUnit.testCase "Hour clock" do
             , process        = hc
             }
 
-        , property = arr predicate
+        , property = always . arr predicate
         }
         where
             predicate :: (Global, ()) -> Bool
