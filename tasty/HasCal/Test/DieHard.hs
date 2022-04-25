@@ -3,34 +3,32 @@
     from Lamport's [*TLA+ Video
     Course*](http://lamport.azurewebsites.net/video/videos.html).
 
-@
-        VARIABLES small, big
+>        VARIABLES small, big
+>
+>        TypeOK = /\ small \in 0..3
+>                 /\ big   \in 0..5
+>
+>        Init == /\ big   = 0
+>                /\ small = 0
+>
+>        FillSmall == /\ small' = 3
+>                     /\ big'   = big
+>
+>        FillBig == /\ big'   = 5
+>                   /\ small' = small
+>
+>        EmptySmall == /\ small' = 0
+>                      /\ big'   = big
+>
+>        EmptyBig == /\ big'   = 0
+>                    /\ small' = small
+>
+>        SmallToBig == /\ big'   = Min(big + small, 5)
+>                      /\ small' = small - (big' - big)
+>
+>        BigToSmall == /\ small' = Min(big + small, 3)
+>                      /\ big'   = big - (small' - small)
 
-        TypeOK = /\ small \in 0..3
-                 /\ big   \in 0..5
-
-        Init == /\ big   = 0
-                /\ small = 0
-
-        FillSmall == /\ small' = 3
-                     /\ big'   = big
-
-        FillBig == /\ big'   = 5
-                   /\ small' = small
-
-        EmptySmall == /\ small' = 0
-                      /\ big'   = big
-
-        EmptyBig == /\ big'   = 0
-                    /\ small' = small
-
-        SmallToBig == /\ big'   = Min(big + small, 5)
-                      /\ small' = small - (big' - big)
-
-        BigToSmall == /\ small' = Min(big + small, 3)
-                      /\ big'   = big - (small' - small)
-
-@
     This module ports the above TLA+ code to HasCal.
 -}
 
@@ -48,6 +46,7 @@ import Prelude hiding (either, init, (.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
+import qualified Test.Tasty.ExpectedFailure as Failure
 import qualified Control.Monad as Monad
 
 data Global = Global { _small :: Int, _big :: Int }
@@ -107,25 +106,27 @@ next =
       ]
 
 test_dieHard :: TestTree
-test_dieHard = HUnit.testCase "Die Hard" do
-    model defaultModel
-        { debug = True
+test_dieHard =
+    Failure.expectFailBecause "The solution to the puzzle is the counterexample" do
+        HUnit.testCase "Die Hard" do
+          model defaultModel
+              { debug = True
 
-        , termination = False
+              , termination = False
 
-        , startingGlobals = do
-            let _small = 0
-                _big   = 0
-            return Global{..}
+              , startingGlobals = do
+                  let _small = 0
+                      _big   = 0
+                  return Global{..}
 
-        , coroutine = Coroutine
-            { startingLabel  = Init
-            , startingLocals = pure ()
-            , process        = init
-            }
+              , coroutine = Coroutine
+                  { startingLabel  = Init
+                  , startingLocals = pure ()
+                  , process        = init
+                  }
 
-        , property = always . arr predicate
-        }
-        where
-          predicate :: (Global, Label) -> Bool
-          predicate (g, _label) = g^.big /= 4
+              , property = always . arr predicate
+              }
+              where
+                predicate :: (Global, Label) -> Bool
+                predicate (g, _label) = g^.big /= 4
