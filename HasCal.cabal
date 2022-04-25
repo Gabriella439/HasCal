@@ -54,6 +54,7 @@ test-suite tasty
                     , HasCal.Test.Flags
                     , HasCal.Test.FastMutex
                     , HasCal.Test.Hanoi
+                    , HasCal.Test.HourClock
                     , HasCal.Test.Market
                     , HasCal.Test.Trade
                     , HasCal.Test.Transfer
