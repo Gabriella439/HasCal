@@ -124,7 +124,7 @@ test_dieHard = HUnit.testCase "Die Hard" do
             , process        = init
             }
 
-        , property = arr predicate
+        , property = always . arr predicate
         }
         where
           predicate :: (Global, Label) -> Bool
