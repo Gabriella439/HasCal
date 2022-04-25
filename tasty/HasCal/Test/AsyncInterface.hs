@@ -1,24 +1,22 @@
 {-| This is the "Our second specification of an asynchronous interface" example
-    from p. 30 in "Specifying Systems" by Lamport:
+    from page 30 in "Specifying Systems" by Lamport:
 
-@
-        CONSTANT Data
-        VARIABLE chan
-        TypeInvariant := chan \in [val : Data, rdy : {0,1}, ack : {0, 1}]
-
-        Init := /\ TypeInvariant
-                /\ chan.ack = chan.rdy
-
-        Send(d) := /\ chan.rdy = chan.ack
-                   /\ chan' = [chan EXCEPT !.val = d, !.rdy = 1 - @]
-
-        Rcv := /\ chan.rdy != chan.ack
-               /\ chan' = [chan EXCPT !.ack = 1 - @]
-
-        Next := (\E d \in Data : Send(d)) \/ Rcv
-
-        Spec := Init /\ [][Next]_chan
-@
+>        CONSTANT Data
+>        VARIABLE chan
+>        TypeInvariant == chan \in [val : Data, rdy : {0,1}, ack : {0, 1}]
+>
+>        Init == /\ TypeInvariant
+>                /\ chan.ack = chan.rdy
+>
+>        Send(d) == /\ chan.rdy = chan.ack
+>                   /\ chan' = [chan EXCEPT !.val = d, !.rdy = 1 - @]
+>
+>        Rcv == /\ chan.rdy != chan.ack
+>               /\ chan' = [chan EXCPT !.ack = 1 - @]
+>
+>        Next == (\E d \in Data : Send(d)) \/ Rcv
+>
+>        Spec == Init /\ [][Next]_chan
 
     The following module is an attempt to translate it to HasCal.
 -}
