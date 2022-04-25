@@ -2,13 +2,11 @@
     [example](https://github.com/tlaplus/Examples/blob/master/specifications/SpecifyingSystems/HourClock/HourClock.tla)
     from figure 2.1 on page 20 in Lamport's *Specifying Systems* book:
 
-@
-        VARIABLE hr
-
-        HCini == hr \in (1 .. 12)
-        HCnxt == hr' = IF hr # 12 THEN hr + 1 ELSE 1
-        HC    == HCini /\ [][HCnxt]_hr
-@
+>        VARIABLE hr
+>
+>        HCini == hr \in (1 .. 12)
+>        HCnxt == hr' = IF hr # 12 THEN hr + 1 ELSE 1
+>        HC    == HCini /\ [][HCnxt]_hr
 
 -}
 
@@ -32,21 +30,22 @@ data Global = Global { _hr :: Int }
 
 makeLenses ''Global
 
-hcIni :: Process Global () () ()
-hcIni = do
-    -- We don't actually need to do anything here, as `_hr` is already
-    -- initialised in `startingGlobals` below, but to stay closer to the
-    -- original TLA+ specification we simply assert that initialisation
-    -- happened.
-    _hr <- use (global.hr)
-    assert (_hr `elem` [1 .. 12])
+data Label = Ini | Nxt
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-hcNxt :: Process Global () () ()
+
+hcIni :: Process Global () Label ()
+hcIni = return ()
+   -- We don't need to do anything here, because `_hr` is already initialised in
+   -- `startingGlobals` below,
+
+hcNxt :: Process Global () Label ()
 hcNxt = do
+    yield Nxt
     h <- use (global.hr)
     global.hr .= if h /= 12 then h + 1 else 1
 
-hc :: Process Global () () ()
+hc :: Process Global () Label ()
 hc = do
     hcIni
     Monad.forever hcNxt
@@ -63,7 +62,7 @@ test_hourClock = HUnit.testCase "Hour clock" do
             return Global{..}
 
         , coroutine = Coroutine
-            { startingLabel  = ()
+            { startingLabel  = Ini
             , startingLocals = pure ()
             , process        = hc
             }
@@ -71,5 +70,5 @@ test_hourClock = HUnit.testCase "Hour clock" do
         , property = arr predicate
         }
         where
-            predicate :: (Global, ()) -> Bool
+            predicate :: (Global, Label) -> Bool
             predicate (Global _hr, _label) = _hr `elem` [1 .. 12]
