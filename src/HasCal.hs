@@ -152,6 +152,8 @@ module HasCal
     , Category(..)
     , Arrow(..)
     , Profunctor(..)
+    , for_
+    , traverse_
     ) where
 
 import Control.Arrow (Arrow(..))
@@ -159,6 +161,7 @@ import Control.Applicative (Alternative(..))
 import Control.Category (Category(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Aeson (ToJSON(..), ToJSONKey(..))
+import Data.Foldable (for_, traverse_)
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
 import Data.Profunctor (Profunctor(..))
