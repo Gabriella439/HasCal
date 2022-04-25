@@ -50,6 +50,7 @@ test-suite tasty
                     , tasty-hunit
                     , tasty-discover
     other-modules:    HasCal.Test.AsyncInterface
+                    , HasCal.Test.DieHard
                     , HasCal.Test.EuclidAlg
                     , HasCal.Test.Flags
                     , HasCal.Test.FastMutex
