@@ -33,7 +33,6 @@ makeLenses ''Global
 data Label = Ini | Nxt
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-
 hcIni :: Process Global () Label ()
 hcIni = return ()
    -- We don't need to do anything here, because `_hr` is already initialised in
@@ -67,8 +66,14 @@ test_hourClock = HUnit.testCase "Hour clock" do
             , process        = hc
             }
 
-        , property = always . arr predicate
+        , property = always . (arr predicate /\ liveness)
         }
         where
             predicate :: (Global, Label) -> Bool
             predicate (Global _hr, _label) = _hr `elem` [1 .. 12]
+
+            liveness :: Property (Global, Label) Bool
+            liveness = eventually . label Nxt
+
+            label :: Eq label => label -> Property (global, label) Bool
+            label x = arr ((== x) . snd)
