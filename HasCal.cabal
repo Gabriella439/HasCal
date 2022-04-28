@@ -16,7 +16,7 @@ common common
                     , ansi-terminal
                     , exceptions
                     , hashable
-                    , list-transformer
+                    , logict
                     , microlens-platform
                     , mtl
                     , prettyprinter

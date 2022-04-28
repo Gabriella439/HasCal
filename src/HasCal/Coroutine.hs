@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns              #-}
 {-# LANGUAGE BlockArguments            #-}
 {-# LANGUAGE DefaultSignatures         #-}
 {-# LANGUAGE DeriveAnyClass            #-}
@@ -10,6 +11,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE TypeApplications          #-}
 
 {-| This module provides the `Process` and `Coroutine` types and associated
@@ -51,6 +53,7 @@ import Control.Applicative (Alternative(..), liftA2)
 import Control.Exception.Safe (Exception)
 import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Logic (LogicT(..))
 import Control.Monad.State.Strict (MonadState(..), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Aeson (ToJSON(..), Value(..))
@@ -65,7 +68,6 @@ import GHC.Generics (Generic)
 import HasCal.Expression (Universe(..), (==>))
 import HasCal.Property (Check(..), Property)
 import Lens.Micro.Platform (Lens')
-import List.Transformer (ListT)
 import Numeric.Natural (Natural)
 import Prelude hiding (either, print)
 import Prettyprinter (Doc, Pretty(..))
@@ -74,6 +76,7 @@ import Prettyprinter.Render.Terminal (AnsiStyle, Color(..))
 import qualified Control.Applicative as Applicative
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
+import qualified Control.Monad.Logic as Logic
 import qualified Control.Monad.State.Lazy as State.Lazy
 import qualified Control.Monad.State.Strict as State
 import qualified Control.Monad.Writer as Writer
@@ -87,7 +90,6 @@ import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified HasCal.Property as Property
 import qualified Lens.Micro.Platform as Lens
-import qualified List.Transformer as List
 import qualified Prelude
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.String as Pretty.String
@@ -105,17 +107,20 @@ import qualified Text.Show as Show
    >>> import HasCal
 -}
 
-hoistListT
-    :: Functor m
-    => (m (List.Step n a) -> n (List.Step n a)) -> ListT m a -> ListT n a
-hoistListT nat (List.ListT x) = List.ListT (nat (fmap (hoistStep nat) x))
+hoistLogicT
+    :: (Monad m, Monad n)
+    => (forall r . m r -> n r) -> LogicT m a -> LogicT n a
+hoistLogicT nat (LogicT f) =
+    LogicT \cons nil ->
+        Monad.join
+            (nat
+                (f  (\x xs -> return (cons x (Monad.join (nat xs))))
+                    (return nil)
+                )
+            )
 
-hoistStep
-    :: Functor m
-    => (m (List.Step n a) -> n (List.Step n a))
-    -> List.Step m a -> List.Step n a
-hoistStep nat (List.Cons a as) = List.Cons a (hoistListT nat as)
-hoistStep _    List.Nil        = List.Nil
+select :: [a] -> LogicT m a
+select as = LogicT (\cons nil -> foldr cons nil as)
 
 {-| A `Process` represents a sequence of @PlusCal@ statements.  You can think of
     a `Process` as a non-deterministic finite automaton:
@@ -162,7 +167,7 @@ hoistStep _    List.Nil        = List.Nil
 newtype Process global local label result
     = Choice
         { possibilities
-            :: StateT (Status global local) (ListT IO)
+            :: StateT (Status global local) (LogicT IO)
                 (Step global local label result)
         }
     deriving stock (Functor)
@@ -1004,8 +1009,13 @@ model Model
         Check finalPropertyStatus stepProperty -> do
             successfulBranches <- handler
                 (State.evalStateT
-                    (List.fold (\n _ -> n + 1) (0 :: Natural) id
+                    (Logic.runLogicT
                         (State.evalStateT action uninitializedTimeline)
+                        (\_ m -> do
+                            !n <- m
+                            return (n + 1)
+                        )
+                        (return (0 :: Natural))
                     )
                     startingSet
                 )
@@ -1017,9 +1027,9 @@ model Model
                 error "Internal error - Uninitialized timeline"
 
             action = do
-                startingGlobal <- lift (List.select startingGlobals)
+                startingGlobal <- lift (select startingGlobals)
 
-                startingLocal <- lift (List.select startingLocals)
+                startingLocal <- lift (select startingLocals)
 
                 let startingProcessStatus = Status
                         { _global = startingGlobal
@@ -1061,7 +1071,7 @@ model Model
             startingSet = HashSet.empty
 
             loop (Choice steps) = do
-                step <- Lens.zoom processStatus (State.mapStateT (hoistListT lift) steps)
+                step <- Lens.zoom processStatus (State.mapStateT (hoistLogicT lift) steps)
 
                 case step of
                     Done () -> do
