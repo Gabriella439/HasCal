@@ -1047,7 +1047,7 @@ model Model
                         -- The temporal `Property` only needs to return `True`
                         -- for the first output, indicating that the property
                         -- holds for the entire sequence
-                        (True, s') <- State.Lazy.runStateT (stepProperty Input{ _state = startingGlobal, _label = startingLabel }) s
+                        (True, s') <- State.Lazy.runStateT (stepProperty startingInput) s
 
                         return s'
 
