@@ -157,9 +157,7 @@ arbitrage maxPrice maxActions = do
                 )
             }
 
-        , property =
-            let predicate (Global{..}, _) = _profit <= 0
-            in  always . arr predicate
+        , property = always . viewing (state . profit . to (<= 0))
         }
 
 test_market :: TestTree

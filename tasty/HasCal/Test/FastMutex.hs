@@ -45,9 +45,9 @@ fastMutex n = model defaultModel
     , coroutine = for [ 1 .. n ] proc
 
     , property =
-        let predicate (_, labels) =
+        let predicate labels =
                 length (filter (== CriticalSection) labels) <= 1
-        in  always . arr predicate
+        in  always . viewing (label . to predicate)
     }
   where
     proc :: Int -> Coroutine Global Label

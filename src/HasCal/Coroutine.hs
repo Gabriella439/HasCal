@@ -44,6 +44,11 @@ module HasCal.Coroutine
     , defaultModel
     , model
 
+    -- * Model input
+    , Input(..)
+    , state
+    , label
+
       -- * Error handling
     , ModelException(..)
     , PropertyFailedReason(..)
@@ -54,7 +59,7 @@ import Control.Exception.Safe (Exception)
 import Control.Monad.Catch (MonadThrow(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logic (LogicT(..))
-import Control.Monad.State.Strict (MonadState(..), StateT)
+import Control.Monad.State.Strict (MonadState(get,put), StateT)
 import Control.Monad.Trans.Class (MonadTrans(..))
 import Data.Aeson (ToJSON(..), Value(..))
 import Data.Aeson.Key (Key)
@@ -181,8 +186,8 @@ instance Monad (Process global local label) where
     Choice ps >>= f = Choice do
         p <- ps
         case p of
-            Yield label rest -> do
-                return (Yield label (rest >>= f))
+            Yield _label rest -> do
+                return (Yield _label (rest >>= f))
             Done result -> possibilities (f result)
 
 instance MonadFail (Process global local label) where
@@ -204,7 +209,7 @@ instance MonadState (Status global local) (Process global local label) where
 
     put s = Choice (fmap Done (put s))
 
-    state k = Choice (fmap Done (state k))
+    state k = Choice (fmap Done (State.state k))
 
 instance MonadThrow (Process global local label) where
     throwM e = Choice (fmap Done (liftIO (throwM e)))
@@ -284,7 +289,7 @@ instance Functor (Coroutine global) where
     fmap = Applicative.liftA
 
 instance Applicative (Coroutine global) where
-    pure label = Coroutine label (pure Unit) empty
+    pure _label = Coroutine _label (pure Unit) empty
 
     Coroutine label0F sF fs0 <*> Coroutine label0X sX xs0 =
         Coroutine label0FX s fxs
@@ -374,7 +379,7 @@ instance (ToJSON a, ToJSON b) => ToJSON (Pair a b) where
 
 -}
 yield :: label -> Process global local label ()
-yield label = Choice (pure (Yield label mempty))
+yield _label = Choice (pure (Yield _label mempty))
 
 {-| A `Process` which does nothing, like the @skip@ statement in PlusCal
 
@@ -580,7 +585,7 @@ data ModelException =
           -- ^ The process failed to satisfy an `assert` statement
     |     forall value . (Show value, ToJSON value)
       =>  PropertyFailed
-               { _propertyHistory :: [value]
+               { _inputHistory :: [value]
                , _reason :: PropertyFailedReason
                }
           -- ^ At least one branch of execution failed to satisfy the specified
@@ -613,9 +618,9 @@ instance Show ModelException where
           showString "AssertionFailed {_status = "
         . shows _status
         . showString "}"
-    showsPrec _ PropertyFailed{ _propertyHistory, _reason } =
-          showString "PropertyFailed {_propertyHistory = "
-        . Show.showListWith shows _propertyHistory
+    showsPrec _ PropertyFailed{ _inputHistory, _reason } =
+          showString "PropertyFailed {_inputHistory = "
+        . Show.showListWith shows _inputHistory
         . showString ", _reason = "
         . shows _reason
         . showString "}"
@@ -632,10 +637,6 @@ instance Exception ModelException where
 data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
     deriving stock (Eq, Generic, Show)
     deriving anyclass (Hashable, ToJSON)
-
-data PropertyInput a b = PropertyInput{ _global :: a, _label :: b }
-    deriving stock (Generic, Show)
-    deriving anyclass (ToJSON)
 
 prettyKey :: Text -> Doc ann
 prettyKey =
@@ -866,12 +867,12 @@ prettyModelException AssertionFailed{ _status } =
         <>  Pretty.hardline
         <>  prettyValue (toJSON _status)
         )
-prettyModelException PropertyFailed{ _propertyHistory, _reason } =
+prettyModelException PropertyFailed{ _inputHistory, _reason } =
     Pretty.align
         (   "Property failed: " <> reason
         <>  Pretty.hardline
         <>  Pretty.hardline
-        <>  prettyValueList (fmap toJSON (reverse _propertyHistory))
+        <>  prettyValueList (fmap toJSON (reverse _inputHistory))
         )
   where
     reason = case _reason of
@@ -892,7 +893,7 @@ data Model global label = Model
       --   and instead throw @`Exit.ExitFailure` 1@ in its place
     , coroutine :: Coroutine global label
       -- ^ `Coroutine` to check
-    , property :: Property (global, label) Bool
+    , property :: Property (Input global label) Bool
       -- ^ `Property` to check
     , startingGlobals :: [global]
       -- ^ Possible starting global states
@@ -935,7 +936,7 @@ data Timeline global local label status = Timeline
       --   which states we've seen so far in order to detect cycles
     , _propertyStatus :: !(HashSet status)
       -- ^ This stores the internal state of the temporal `Property`
-    , _propertyHistory :: [ PropertyInput global label ]
+    , _inputHistory :: [ Input global label ]
     }
 
 -- A lens for accessing the process status of a `Timeline`
@@ -975,11 +976,11 @@ processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
     >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True, debug = True, termination = False }
 
     >>> -- Check a non-trivial property that succeeds
-    >>> exampleProperty = eventually . always . arr snd
+    >>> exampleProperty = eventually . always . viewing label
     >>> model defaultModel{ coroutine = endlessCoroutine, property = exampleProperty, debug = True, termination = False }
 
     >>> -- Check a non-trivial property that fails
-    >>> model defaultModel{ coroutine = endlessCoroutine, property = always . arr (not . snd), debug = True, termination = False }
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = always . viewing (label . to not), debug = True, termination = False }
     Property failed: unsatisfiable
     ...
     [ { Global: [ ], Label: False }, { Global: [ ], Label: True } ]
@@ -1036,10 +1037,9 @@ model Model
                         , _local  = startingLocal
                         }
 
-                let startingPropertyInput =
-                        PropertyInput startingGlobal startingLabel
+                let startingInput = Input startingGlobal startingLabel
 
-                let _propertyHistory = [ startingPropertyInput ]
+                let _inputHistory = [ startingInput ]
 
                 let _propertyStatus = HashSet.fromList do
                         s <- universe
@@ -1047,14 +1047,14 @@ model Model
                         -- The temporal `Property` only needs to return `True`
                         -- for the first output, indicating that the property
                         -- holds for the entire sequence
-                        (True, s') <- State.Lazy.runStateT (stepProperty (startingGlobal, startingLabel)) s
+                        (True, s') <- State.Lazy.runStateT (stepProperty Input{ _state = startingGlobal, _label = startingLabel }) s
 
                         return s'
 
                 Monad.when (HashSet.null _propertyStatus) do
                     let _reason = Unsatisfiable
 
-                    liftIO (Exception.throw PropertyFailed{ _propertyHistory, _reason })
+                    liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
 
                 let historyKey = HistoryKey startingLabel startingProcessStatus
 
@@ -1063,7 +1063,7 @@ model Model
                     , _history         = [ historyKey ]
                     , _historySet      = HashSet.singleton historyKey
                     , _propertyStatus
-                    , _propertyHistory
+                    , _inputHistory
                     }
 
                 loop process
@@ -1075,19 +1075,19 @@ model Model
 
                 case step of
                     Done () -> do
-                        Timeline{ _propertyStatus, _propertyHistory } <- get
+                        Timeline{ _propertyStatus, _inputHistory } <- get
 
                         Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
                             let _reason = UnsatisfyingConclusion
 
-                            liftIO (Exception.throw PropertyFailed{ _propertyHistory, _reason })
+                            liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
 
-                    Yield label rest -> do
-                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _propertyHistory } <- get
+                    Yield _label rest -> do
+                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _inputHistory } <- get
 
                         let Status{ _global } = _processStatus
 
-                        let propertyInput = PropertyInput _global label
+                        let input = Input{ _state = _global, _label }
 
                         let newPropertyStatus = HashSet.fromList do
                                 s <- HashSet.toList _propertyStatus
@@ -1096,20 +1096,19 @@ model Model
                                 -- temporal `Property` for subsequent outputs
                                 -- because we don't care if the temporal
                                 -- `Property` holds for a suffix of the behavior
-                                State.Lazy.execStateT (stepProperty (_global, label)) s
+                                State.Lazy.execStateT (stepProperty input) s
 
-                        let seenKey = (label, _processStatus, newPropertyStatus)
+                        let seenKey = (_label, _processStatus, newPropertyStatus)
 
-                        let historyKey = HistoryKey label _processStatus
+                        let historyKey = HistoryKey _label _processStatus
 
                         let newHistory = historyKey : _history
 
-                        let newPropertyHistory =
-                                propertyInput : _propertyHistory
+                        let newInputHistory = input : _inputHistory
 
                         Monad.when (HashSet.null newPropertyStatus) do
                             let _reason = Unsatisfiable
-                            liftIO (Exception.throw PropertyFailed{ _propertyHistory = newPropertyHistory, _reason })
+                            liftIO (Exception.throw PropertyFailed{ _inputHistory = newInputHistory, _reason })
 
                         seen <- lift get
 
@@ -1125,7 +1124,7 @@ model Model
                             , _history = newHistory
                             , _historySet = HashSet.insert historyKey _historySet
                             , _propertyStatus = newPropertyStatus
-                            , _propertyHistory = newPropertyHistory
+                            , _inputHistory = newInputHistory
                             }
 
                         loop rest
@@ -1146,3 +1145,20 @@ model Model
                     putDoc (prettyModelException exception <> "\n")
 
                     Exception.throwIO (Exit.ExitFailure 1)
+
+-- | The input to a temporal `Property`
+data Input global label = Input
+    { _state :: !global
+      -- ^ The current (global) state
+    , _label :: !label
+      -- ^ The current label
+    } deriving stock (Generic, Show)
+      deriving anyclass (ToJSON)
+
+-- | A lens for accessing the global state of an `Input`
+state :: Lens' (Input global label) global
+state k (Input a b) = fmap (\a' -> Input a' b) (k a)
+
+-- | A lens for accessing the label of an `Input`
+label :: Lens' (Input global label) label
+label k (Input a b) = fmap (\b' -> Input a b') (k b)

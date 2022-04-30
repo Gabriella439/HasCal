@@ -22,6 +22,7 @@ module HasCal.Property
     , eventually
     , always
     , (~>)
+    , viewing
     , prime
     , following
     , infer
@@ -40,12 +41,14 @@ import Data.Hashable (Hashable(..))
 import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
 import HasCal.Expression (Universe(..), (==>))
+import Lens.Micro.Platform (Getting)
 import Prelude hiding (id, (.))
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Trans.State as State
 import qualified Data.HashSet as HashSet
 import qualified Data.HashMap.Strict as HashMap
+import qualified Lens.Micro.Platform as Lens
 
 {- $setup
 
@@ -247,6 +250,22 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
+
+{-| Turn a getter into the equivalent `Property`
+
+    > `viewing` getter = `arr` (`Lens.view` getter)
+
+    This comes in handy in conjunction with the `HasCal.Coroutine.state` and
+    `HasCal.Coroutine.label` lenses:
+
+    > `eventually` . `viewing` (`label` . `to` (== "foo"))
+    >     :: Property (Input global String) Bool
+
+    >>> infer (viewing _1) [ (True, 1), (False, 2), (True, 3) ]
+    [True,False,True]
+-}
+viewing :: Getting b a b -> Property a b
+viewing getter = arr (Lens.view getter)
 
 {-| This property outputs each element with the following element (or `Nothing`
     if there is no following element)

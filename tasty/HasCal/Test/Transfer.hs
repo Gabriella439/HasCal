@@ -69,9 +69,9 @@ test_transfer =
                 , coroutine = traverse transfer [ 1 .. 2 ]
 
                 , property =
-                    let predicate (Global{..}, _) =
+                    let predicate Global{..} =
                             _alice_account + _bob_account == _account_total
-                    in  always . arr predicate
+                    in  always . viewing (state . to predicate)
                 }
   where
     transfer :: Int -> Coroutine Global Label
