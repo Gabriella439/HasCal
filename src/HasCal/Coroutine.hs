@@ -983,7 +983,7 @@ processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
     >>> model defaultModel{ coroutine = endlessCoroutine, property = always . viewing (label . to not), debug = True, termination = False }
     Property failed: unsatisfiable
     ...
-    [ { Global: [ ], Label: False }, { Global: [ ], Label: True } ]
+    [ { Label: False, State: [ ] }, { Label: True, State: [ ] } ]
     *** Exception: ExitFailure 1
 -}
 model
