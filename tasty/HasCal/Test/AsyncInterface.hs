@@ -83,7 +83,8 @@ rcv = do
   _rdy <- use (global.chan.rdy)
   _ack <- use (global.chan.ack)
   await (_rdy /= _ack)
-  yield Init -- XXX: Just to see if liveness works...
+  yield Init -- TODO: This should be changed back to Rcv once checker can check
+             --       for liveness, see issue #10 and PR #11.
   global.chan.ack %= not
 
 test_asyncInterface :: TestTree
@@ -109,10 +110,5 @@ test_asyncInterface = HUnit.testCase "Async interface" do
         , property = always . liveness
         }
     where
-        liveness :: Property (Global Data, Label Data) Bool
-        liveness = arr (\(g, _l) -> g^.chan.rdy /= g^.chan.ack) ~> label Rcv
-
-        -- TODO: move to `Property` module? Not sure if it belongs there as it's
-        -- type is a bit special?
-        label :: Eq label => label -> Property (global, label) Bool
-        label x = arr ((== x) . snd)
+        liveness :: Property (Input (Global Data) (Label Data)) Bool
+        liveness = viewing (state . to (\g -> g^.chan.rdy /= g^.chan.ack)) ~> viewing (label . to (== Rcv))
