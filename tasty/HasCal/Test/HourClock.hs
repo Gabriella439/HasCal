@@ -66,14 +66,8 @@ test_hourClock = HUnit.testCase "Hour clock" do
             , process        = hc
             }
 
-        , property = always . (arr predicate /\ liveness)
+        , property = always . (viewing (state . hr . to (`elem` [ 1 .. 12 ])) /\ liveness)
         }
         where
-            predicate :: (Global, Label) -> Bool
-            predicate (Global _hr, _label) = _hr `elem` [1 .. 12]
-
-            liveness :: Property (Global, Label) Bool
-            liveness = eventually . label Nxt
-
-            label :: Eq label => label -> Property (global, label) Bool
-            label x = arr ((== x) . snd)
+            liveness :: Property (Input Global Label) Bool
+            liveness = eventually . viewing (label . to (== Nxt))

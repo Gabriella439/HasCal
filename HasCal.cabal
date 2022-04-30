@@ -16,7 +16,7 @@ common common
                     , ansi-terminal
                     , exceptions
                     , hashable
-                    , list-transformer
+                    , logict
                     , microlens-platform
                     , mtl
                     , prettyprinter
@@ -28,7 +28,7 @@ common common
                     , transformers
                     , unordered-containers
     hs-source-dirs:   src
-    ghc-options:      -Wall
+    ghc-options:      -Wall -O2
     default-language: Haskell2010
 
 library
@@ -60,7 +60,7 @@ test-suite tasty
                     , HasCal.Test.Trade
                     , HasCal.Test.Transfer
     hs-source-dirs:   tasty
-    ghc-options:      -Wall
+    ghc-options:      -Wall -O2
     default-language: Haskell2010
 
 test-suite doctest
@@ -68,5 +68,5 @@ test-suite doctest
     hs-source-dirs:   doctest
     main-is:          Main.hs
     build-depends:    base, HasCal, doctest-parallel
-    ghc-options:      -Wall -threaded
+    ghc-options:      -Wall -O2 -threaded
     default-language: Haskell2010

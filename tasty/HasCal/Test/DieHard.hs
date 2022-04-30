@@ -110,9 +110,7 @@ test_dieHard =
     Failure.expectFailBecause "The solution to the puzzle is the counterexample" do
         HUnit.testCase "Die Hard" do
           model defaultModel
-              { debug = True
-
-              , termination = False
+              { termination = False
 
               , startingGlobals = do
                   let _small = 0
@@ -125,8 +123,5 @@ test_dieHard =
                   , process        = init
                   }
 
-              , property = always . arr predicate
+              , property = always . viewing (state . big . to (/= 4))
               }
-              where
-                predicate :: (Global, Label) -> Bool
-                predicate (g, _label) = g^.big /= 4
