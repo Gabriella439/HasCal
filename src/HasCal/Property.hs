@@ -301,8 +301,8 @@ following (?) = arr adapt . prime
     >>> infer (arr even \/ arr (> 3)) [ 1, 2, 3, 4, 5, 6 ]
     [False,True,False,True,True,True]
 -}
-(\/) :: Property a Bool -> Property a Bool -> Property a Bool
-p \/ q = fmap (||) p <*> q
+(\/) :: Applicative f => f Bool -> f Bool -> f Bool
+(\/) = liftA2 (||)
 
 {-| Convert a `Property` into the equivalent list transformation
 
