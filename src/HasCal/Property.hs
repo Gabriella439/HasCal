@@ -293,8 +293,8 @@ following (?) = arr adapt . prime
     >>> infer (arr even /\ arr (> 3)) [ 1, 2, 3, 4, 5, 6 ]
     [False,False,False,True,False,True]
 -}
-(/\) :: Property a Bool -> Property a Bool -> Property a Bool
-p /\ q = fmap (&&) p <*> q
+(/\) :: Applicative f => f Bool -> f Bool -> f Bool
+(/\) = liftA2 (&&)
 
 {-| @p `\/` q@ returns `True` if either @p@ or @q@ return `True`.
 
