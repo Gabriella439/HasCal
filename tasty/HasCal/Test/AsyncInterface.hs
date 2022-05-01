@@ -111,4 +111,4 @@ test_asyncInterface = HUnit.testCase "Async interface" do
         }
     where
         liveness :: Property (Input (Global Data) (Label Data)) Bool
-        liveness = viewing (state . to (\g -> g^.chan.rdy /= g^.chan.ack)) ~> viewing (label . to (== Rcv))
+        liveness = viewing (state . chan . to (\g -> g^.rdy /= g^.ack)) ~> viewing (label . to (== Rcv))
