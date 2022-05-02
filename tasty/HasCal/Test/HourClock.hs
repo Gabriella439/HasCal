@@ -33,7 +33,6 @@ makeLenses ''Global
 data Label = Ini | Nxt
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-
 hcIni :: Process Global () Label ()
 hcIni = return ()
    -- We don't need to do anything here, because `_hr` is already initialised in
@@ -67,5 +66,8 @@ test_hourClock = HUnit.testCase "Hour clock" do
             , process        = hc
             }
 
-        , property = always . viewing (state . hr . to (`elem` [ 1 .. 12 ]))
+        , property = always . (viewing (state . hr . to (`elem` [ 1 .. 12 ])) /\ liveness)
         }
+        where
+            liveness :: Property (Input Global Label) Bool
+            liveness = eventually . viewing (label . to (== Nxt))

@@ -83,7 +83,8 @@ rcv = do
   _rdy <- use (global.chan.rdy)
   _ack <- use (global.chan.ack)
   await (_rdy /= _ack)
-  yield Rcv
+  yield Init -- TODO: This should be changed back to Rcv once checker can check
+             --       for liveness, see issue #10 and PR #11.
   global.chan.ack %= not
 
 test_asyncInterface :: TestTree
@@ -106,5 +107,8 @@ test_asyncInterface = HUnit.testCase "Async interface" do
             , process        = init
             }
 
-        , property = pure True
+        , property = always . liveness
         }
+    where
+        liveness :: Property (Input (Global Data) (Label Data)) Bool
+        liveness = viewing (state . chan . to (\g -> g^.rdy /= g^.ack)) ~> viewing (label . to (== Rcv))

@@ -25,6 +25,8 @@ module HasCal.Property
     , viewing
     , prime
     , following
+    , (/\)
+    , (\/)
     , infer
 
     -- * Check
@@ -304,6 +306,22 @@ following (?) = arr adapt . prime
   where
     adapt  Nothing      = True
     adapt (Just (x, y)) = x ? y
+
+{-| @p `/\` q@ returns `True` if both @p@ and @q@ return `True`.
+
+    >>> infer (arr even /\ arr (> 3)) [ 1, 2, 3, 4, 5, 6 ]
+    [False,False,False,True,False,True]
+-}
+(/\) :: Applicative f => f Bool -> f Bool -> f Bool
+(/\) = liftA2 (&&)
+
+{-| @p `\/` q@ returns `True` if either @p@ or @q@ return `True`.
+
+    >>> infer (arr even \/ arr (> 3)) [ 1, 2, 3, 4, 5, 6 ]
+    [False,True,False,True,True,True]
+-}
+(\/) :: Applicative f => f Bool -> f Bool -> f Bool
+(\/) = liftA2 (||)
 
 {-| Convert a `Property` into the equivalent list transformation
 
