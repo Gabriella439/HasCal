@@ -634,7 +634,7 @@ instance Exception ModelException where
         Pretty.String.renderString
             (Pretty.layoutPretty Pretty.defaultLayoutOptions (pretty exception))
 
-data HistoryKey a b = HistoryKey{ _label :: a, _status :: b }
+data HistoryKey a b = HistoryKey{ _label :: !a, _status :: !b }
     deriving stock (Eq, Generic, Show)
     deriving anyclass (Hashable, ToJSON)
 
@@ -1098,7 +1098,7 @@ model Model
                                 -- `Property` holds for a suffix of the behavior
                                 State.Lazy.execStateT (stepProperty input) s
 
-                        let seenKey = (_label, _processStatus, newPropertyStatus)
+                        let seenKey = Seen{ _label, _processStatus, _propertyStatus = newPropertyStatus }
 
                         let historyKey = HistoryKey _label _processStatus
 
@@ -1162,3 +1162,11 @@ state k (Input a b) = fmap (\a' -> Input a' b) (k a)
 -- | A lens for accessing the label of an `Input`
 label :: Lens' (Input global label) label
 label k (Input a b) = fmap (\b' -> Input a b') (k b)
+
+-- | Used internally to detect cycles
+data Seen label processStatus propertyStatus = Seen
+    { _label          :: !label
+    , _processStatus  :: !processStatus
+    , _propertyStatus :: !propertyStatus
+    } deriving stock (Eq, Generic)
+      deriving anyclass (Hashable)
