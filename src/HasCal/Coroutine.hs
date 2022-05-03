@@ -91,6 +91,8 @@ import qualified Data.Algorithm.Diff as Diff
 import qualified Data.Char as Char
 import qualified Data.Foldable as Foldable
 import qualified Data.HashSet as HashSet
+import qualified Data.HashTable.IO as HashTable
+import qualified Data.HashTable.ST.Cuckoo as Cuckoo
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified HasCal.Property as Property
@@ -111,18 +113,6 @@ import qualified Text.Show as Show
    >>> import Prelude hiding ((.), id)
    >>> import HasCal
 -}
-
-hoistLogicT
-    :: (Monad m, Monad n)
-    => (forall r . m r -> n r) -> LogicT m a -> LogicT n a
-hoistLogicT nat (LogicT f) =
-    LogicT \cons nil ->
-        Monad.join
-            (nat
-                (f  (\x xs -> return (cons x (Monad.join (nat xs))))
-                    (return nil)
-                )
-            )
 
 select :: [a] -> LogicT m a
 select as = LogicT (\cons nil -> foldr cons nil as)
@@ -1008,17 +998,16 @@ model Model
     } =
     case Property.check property of
         Check finalPropertyStatus stepProperty -> do
+            hashtable <- HashTable.new @Cuckoo.HashTable
+
             successfulBranches <- handler
-                (State.evalStateT
-                    (Logic.runLogicT
-                        (State.evalStateT action uninitializedTimeline)
-                        (\_ m -> do
-                            !n <- m
-                            return (n + 1)
-                        )
-                        (return (0 :: Natural))
+                (Logic.runLogicT
+                    (State.evalStateT (action hashtable) uninitializedTimeline)
+                    (\_ m -> do
+                        !n <- m
+                        return (n + 1)
                     )
-                    startingSet
+                    (return (0 :: Natural))
                 )
 
             Monad.unless (termination ==> 0 < successfulBranches) do
@@ -1027,7 +1016,7 @@ model Model
             uninitializedTimeline =
                 error "Internal error - Uninitialized timeline"
 
-            action = do
+            action hashtable = do
                 startingGlobal <- lift (select startingGlobals)
 
                 startingLocal <- lift (select startingLocals)
@@ -1066,12 +1055,10 @@ model Model
                     , _inputHistory
                     }
 
-                loop process
+                loop hashtable process
 
-            startingSet = HashSet.empty
-
-            loop (Choice steps) = do
-                step <- Lens.zoom processStatus (State.mapStateT (hoistLogicT lift) steps)
+            loop hashtable (Choice steps) = do
+                step <- Lens.zoom processStatus steps
 
                 case step of
                     Done () -> do
@@ -1110,14 +1097,18 @@ model Model
                             let _reason = Unsatisfiable
                             liftIO (Exception.throw PropertyFailed{ _inputHistory = newInputHistory, _reason })
 
-                        seen <- lift get
-
                         Monad.when (HashSet.member historyKey _historySet && termination) do
                             liftIO (Exception.throw (Nontermination newHistory))
 
-                        Monad.when (HashSet.member seenKey seen) empty
+                        maybeSeen <- liftIO (HashTable.lookup hashtable seenKey)
 
-                        lift (put $! HashSet.insert seenKey seen)
+                        let member = case maybeSeen of
+                                Nothing -> False
+                                Just _  -> True
+
+                        Monad.when member empty
+
+                        liftIO (HashTable.insert hashtable seenKey ())
 
                         put $! Timeline
                             { _processStatus
@@ -1127,7 +1118,7 @@ model Model
                             , _inputHistory = newInputHistory
                             }
 
-                        loop rest
+                        loop hashtable rest
 
             handler :: IO a -> IO a
             handler
@@ -1141,6 +1132,7 @@ model Model
                             if terminal
                             then Pretty.Terminal.putDoc
                             else Pretty.Text.putDoc
+
 
                     putDoc (prettyModelException exception <> "\n")
 

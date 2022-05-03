@@ -16,6 +16,7 @@ common common
                     , ansi-terminal
                     , exceptions
                     , hashable
+                    , hashtables
                     , logict
                     , microlens-platform
                     , mtl
