@@ -1,6 +1,8 @@
+{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE BlockArguments   #-}
 {-# LANGUAGE DeriveGeneric    #-}
 {-# LANGUAGE DeriveAnyClass   #-}
+{-# LANGUAGE NamedFieldPuns   #-}
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TypeApplications #-}
@@ -54,11 +56,12 @@
 module HasCal.Test.Market where
 
 import Data.Set (Set)
-import Prelude hiding ((.))
+import Prelude hiding (either, (.))
 import HasCal
 import Test.Tasty (TestTree)
 
 import qualified Control.Monad as Monad
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Set as Set
 import qualified Test.Tasty.HUnit as HUnit
 import qualified Test.Tasty.ExpectedFailure as Failure
@@ -68,8 +71,8 @@ data Item = Ore | Sheep | Brick
         ( Bounded
         , Enum
         , Eq
-        , Generic
         , Hashable
+        , Generic
         , Ord
         , Show
         , ToJSON
@@ -80,17 +83,18 @@ data Item = Ore | Sheep | Brick
 data Vendor = Alice
     deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
 
-data Offer = Offer { _buy :: Int, _sell :: Int }
+data Offer = Offer { _buy :: !Int, _sell :: !Int }
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Global = Global
-    { _market   :: HashMap (Vendor, Item) Offer
-    , _trades   :: HashMap [Item] Item
-    , _backpack :: Set Item
-    , _profit   :: Int
+    { _market   :: !(HashMap (Vendor, Item) Offer)
+    , _trades   :: !(HashMap [Item] Item)
+    , _backpack :: !(Set Item)
+    , _profit   :: !Int
+    , _actions  :: !Int
     } deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Label = Act | Buy Int | Sell Int | Trade Int
+data Label = Act | Buy | Sell | Trade | Loop
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Offer
@@ -112,19 +116,25 @@ arbitrage maxPrice maxActions = do
             let _range = do
                     _buy  <- _P
                     _sell <- _P
+                    Monad.guard (_buy <= _sell)
                     return Offer{..}
 
             _market <- _domain --> _range
 
-            let maxBuy  = maximum (fmap _buy _market)
-            let minSell = minimum (fmap _sell _market)
-            Monad.guard (maxBuy <= minSell)
+            let validMarket = and do
+                    ((_, item0), Offer{ _buy  }) <- HashMap.toList _market 
+                    ((_, item1), Offer{ _sell }) <- HashMap.toList _market 
+                    return (item0 == item1 ==> _buy <= _sell)
+
+            Monad.guard validMarket
+
+            _trades <- filter (\items -> 1 < length items) (subset _I) --> _I
 
             let _backpack = Set.empty
 
             let _profit = 0
 
-            _trades <- subset _I --> _I
+            let _actions = 0
 
             return Global{..}
 
@@ -133,28 +143,36 @@ arbitrage maxPrice maxActions = do
 
             , startingLocals = pure ()
 
-            , process = Monad.forM_ [ 1 .. maxActions ] \n ->
-                (   do  yield (Buy n)
-                        _backpack <- use (global.backpack)
-                        v <- with _V
-                        i <- with (Set.toList (Set.difference (Set.fromList _I) _backpack))
-                        Just loss <- preuse (global.market.ix (v, i).sell)
-                        global.profit -= loss
-                        global.backpack %= Set.insert i
-                <|> do  yield (Sell n)
-                        _backpack <- use (global.backpack)
-                        v <- with _V
-                        i <- with (Set.toList _backpack)
-                        Just gain <- preuse (global.market.ix (v, i).buy)
-                        global.profit += gain
-                        global.backpack %= Set.delete i
-                <|> do  yield (Trade n)
-                        _backpack <- use (global.backpack)
-                        _trades <- use (global.trades)
-                        itemsLost <- with (Set.toList (Set.intersection (Set.fromList (subset (Set.toList _backpack))) (Set.fromList (domain _trades))))
-                        Just itemGained <- preuse (global.trades.ix itemsLost)
-                        global.backpack %= Set.insert itemGained . (`Set.difference` (Set.fromList itemsLost))
-                )
+            , process = do
+                while (do a <- use (global.actions); pure (a < maxActions)) do
+                    either
+                        [ do
+                            yield Buy
+                            _backpack <- use (global.backpack)
+                            v <- with _V
+                            i <- with (Set.toList (Set.difference (Set.fromList _I) _backpack))
+                            Just loss <- preuse (global.market.ix (v, i).sell)
+                            global.profit -= loss
+                            global.backpack %= Set.insert i
+                        , do
+                            yield Sell
+                            _backpack <- use (global.backpack)
+                            v <- with _V
+                            i <- with (Set.toList _backpack)
+                            Just gain <- preuse (global.market.ix (v, i).buy)
+                            global.profit += gain
+                            global.backpack %= Set.delete i
+                        , do
+                            yield Trade
+                            _backpack <- use (global.backpack)
+                            _trades <- use (global.trades)
+                            itemsLost <- with (Set.toList (Set.intersection (Set.fromList (subset (Set.toList _backpack))) (Set.fromList (domain _trades))))
+                            Just itemGained <- preuse (global.trades.ix itemsLost)
+                            global.backpack %= Set.insert itemGained . (`Set.difference` (Set.fromList itemsLost))
+                        ]
+
+                    yield Loop
+                    global.actions += 1
             }
 
         , property = always . viewing (state . profit . to (<= 0))
