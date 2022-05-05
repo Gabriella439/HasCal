@@ -52,9 +52,7 @@ hc = do
 test_hourClock :: TestTree
 test_hourClock = HUnit.testCase "Hour clock" do
     model defaultModel
-        { debug = True
-
-        , termination = False
+        { termination = False
 
         , startingGlobals = do
             _hr <- [1 .. 12]

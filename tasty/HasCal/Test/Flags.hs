@@ -59,9 +59,7 @@ makeLenses ''Global
 test_flags :: TestTree
 test_flags = HUnit.testCase "Flags" do
     model defaultModel
-        { debug = True
-
-        , termination = False
+        { termination = False
 
         , startingGlobals = do
             _f1 <- universe @Bool

@@ -60,9 +60,7 @@ makeLenses ''Global
 test_trade :: TestTree
 test_trade = HUnit.testCase "Trade" do
     model defaultModel
-        { debug = True
-
-        , startingGlobals = do
+        { startingGlobals = do
             _owner_of <- universe @Items --> universe @People
             return Global{..}
 

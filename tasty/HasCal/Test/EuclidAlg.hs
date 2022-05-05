@@ -29,9 +29,7 @@ initialU = 24
 euclidAlg :: Int -> IO ()
 euclidAlg n = do
     model defaultModel
-        { debug = True
-
-        , startingGlobals = do
+        { startingGlobals = do
             _v <- [ 1 .. n ]
             let _u = initialU
             return Global{..}

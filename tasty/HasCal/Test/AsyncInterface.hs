@@ -90,9 +90,7 @@ rcv = do
 test_asyncInterface :: TestTree
 test_asyncInterface = HUnit.testCase "Async interface" do
     model defaultModel
-        { debug = True
-
-        , termination = False
+        { termination = False
 
         , startingGlobals = do
             _val <- universe @Data

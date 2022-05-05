@@ -93,6 +93,7 @@ import qualified Data.Foldable as Foldable
 import qualified Data.HashSet as HashSet
 import qualified Data.HashTable.IO as HashTable
 import qualified Data.HashTable.ST.Cuckoo as Cuckoo
+import qualified Data.IORef as IORef
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified HasCal.Property as Property
@@ -995,14 +996,129 @@ model Model
     , property
     , startingGlobals
     , coroutine = Coroutine{ startingLabel, startingLocals, process }
-    } =
+    } = do
+    terminal <- ANSI.hSupportsANSI IO.stdout
+
+    let putDoc doc =
+            if terminal
+            then Pretty.Terminal.putDoc (doc <> "\n")
+            else Pretty.Text.putDoc (doc <> "\n")
+
+    redundantStatesReference <- IORef.newIORef 0
+
     case Property.check property of
         Check finalPropertyStatus stepProperty -> do
             hashtable <- HashTable.new @Cuckoo.HashTable
 
-            successfulBranches <- handler
+            let action = do
+                    startingGlobal <- lift (select startingGlobals)
+
+                    startingLocal <- lift (select startingLocals)
+
+                    let startingProcessStatus = Status
+                            { _global = startingGlobal
+                            , _local  = startingLocal
+                            }
+
+                    let startingInput = Input startingGlobal startingLabel
+
+                    let _inputHistory = [ startingInput ]
+
+                    let _propertyStatus = HashSet.fromList do
+                            s <- universe
+
+                            -- The temporal `Property` only needs to return `True`
+                            -- for the first output, indicating that the property
+                            -- holds for the entire sequence
+                            (True, s') <- State.Lazy.runStateT (stepProperty startingInput) s
+
+                            return s'
+
+                    Monad.when (HashSet.null _propertyStatus) do
+                        let _reason = Unsatisfiable
+
+                        liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
+
+                    let historyKey = HistoryKey startingLabel startingProcessStatus
+
+                    put $! Timeline
+                        { _processStatus   = startingProcessStatus
+                        , _history         = [ historyKey ]
+                        , _historySet      = HashSet.singleton historyKey
+                        , _propertyStatus
+                        , _inputHistory
+                        }
+
+                    loop process
+
+                loop (Choice steps) = do
+                    step <- Lens.zoom processStatus steps
+
+                    case step of
+                        Done () -> do
+                            Timeline{ _propertyStatus, _inputHistory } <- get
+
+                            Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
+                                let _reason = UnsatisfyingConclusion
+
+                                liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
+
+                        Yield _label rest -> do
+                            Timeline{ _processStatus, _history, _historySet, _propertyStatus, _inputHistory } <- get
+
+                            let Status{ _global } = _processStatus
+
+                            let input = Input{ _state = _global, _label }
+
+                            let newPropertyStatus = HashSet.fromList do
+                                    s <- HashSet.toList _propertyStatus
+
+                                    -- We're uninterested in the output of the
+                                    -- temporal `Property` for subsequent outputs
+                                    -- because we don't care if the temporal
+                                    -- `Property` holds for a suffix of the behavior
+                                    State.Lazy.execStateT (stepProperty input) s
+
+                            let seenKey = Seen{ _label, _processStatus, _propertyStatus = newPropertyStatus }
+
+                            let historyKey = HistoryKey _label _processStatus
+
+                            let newHistory = historyKey : _history
+
+                            let newInputHistory = input : _inputHistory
+
+                            Monad.when (HashSet.null newPropertyStatus) do
+                                let _reason = Unsatisfiable
+                                liftIO (Exception.throw PropertyFailed{ _inputHistory = newInputHistory, _reason })
+
+                            Monad.when (HashSet.member historyKey _historySet && termination) do
+                                liftIO (Exception.throw (Nontermination newHistory))
+
+                            maybeSeen <- liftIO (HashTable.lookup hashtable seenKey)
+
+                            let member = case maybeSeen of
+                                    Nothing -> False
+                                    Just _  -> True
+
+                            Monad.when member do
+                                liftIO (IORef.modifyIORef' redundantStatesReference (+ 1))
+                                empty
+
+                            liftIO (HashTable.insert hashtable seenKey ())
+
+                            put $! Timeline
+                                { _processStatus
+                                , _history = newHistory
+                                , _historySet = HashSet.insert historyKey _historySet
+                                , _propertyStatus = newPropertyStatus
+                                , _inputHistory = newInputHistory
+                                }
+
+                            loop rest
+
+            _successfulBranches <- handler
                 (Logic.runLogicT
-                    (State.evalStateT (action hashtable) uninitializedTimeline)
+                    (State.evalStateT action uninitializedTimeline)
                     (\_ m -> do
                         !n <- m
                         return (n + 1)
@@ -1010,115 +1126,24 @@ model Model
                     (return (0 :: Natural))
                 )
 
-            Monad.unless (termination ==> 0 < successfulBranches) do
+            _visitedStates <- HashTable.foldM (\n _ -> return (n + 1)) 0 hashtable
+
+            _redundantStates <- IORef.readIORef redundantStatesReference
+
+            let statistics = Statistics
+                    { _redundantStates
+                    , _successfulBranches
+                    , _visitedStates
+                    }
+
+            Monad.when debug do
+                putDoc (prettyValue (toJSON statistics))
+
+            Monad.unless (termination ==> 0 < _successfulBranches) do
                 Exception.throw Deadlock
           where
             uninitializedTimeline =
                 error "Internal error - Uninitialized timeline"
-
-            action hashtable = do
-                startingGlobal <- lift (select startingGlobals)
-
-                startingLocal <- lift (select startingLocals)
-
-                let startingProcessStatus = Status
-                        { _global = startingGlobal
-                        , _local  = startingLocal
-                        }
-
-                let startingInput = Input startingGlobal startingLabel
-
-                let _inputHistory = [ startingInput ]
-
-                let _propertyStatus = HashSet.fromList do
-                        s <- universe
-
-                        -- The temporal `Property` only needs to return `True`
-                        -- for the first output, indicating that the property
-                        -- holds for the entire sequence
-                        (True, s') <- State.Lazy.runStateT (stepProperty startingInput) s
-
-                        return s'
-
-                Monad.when (HashSet.null _propertyStatus) do
-                    let _reason = Unsatisfiable
-
-                    liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
-
-                let historyKey = HistoryKey startingLabel startingProcessStatus
-
-                put $! Timeline
-                    { _processStatus   = startingProcessStatus
-                    , _history         = [ historyKey ]
-                    , _historySet      = HashSet.singleton historyKey
-                    , _propertyStatus
-                    , _inputHistory
-                    }
-
-                loop hashtable process
-
-            loop hashtable (Choice steps) = do
-                step <- Lens.zoom processStatus steps
-
-                case step of
-                    Done () -> do
-                        Timeline{ _propertyStatus, _inputHistory } <- get
-
-                        Monad.unless (HashSet.member finalPropertyStatus _propertyStatus) do
-                            let _reason = UnsatisfyingConclusion
-
-                            liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
-
-                    Yield _label rest -> do
-                        Timeline{ _processStatus, _history, _historySet, _propertyStatus, _inputHistory } <- get
-
-                        let Status{ _global } = _processStatus
-
-                        let input = Input{ _state = _global, _label }
-
-                        let newPropertyStatus = HashSet.fromList do
-                                s <- HashSet.toList _propertyStatus
-
-                                -- We're uninterested in the output of the
-                                -- temporal `Property` for subsequent outputs
-                                -- because we don't care if the temporal
-                                -- `Property` holds for a suffix of the behavior
-                                State.Lazy.execStateT (stepProperty input) s
-
-                        let seenKey = Seen{ _label, _processStatus, _propertyStatus = newPropertyStatus }
-
-                        let historyKey = HistoryKey _label _processStatus
-
-                        let newHistory = historyKey : _history
-
-                        let newInputHistory = input : _inputHistory
-
-                        Monad.when (HashSet.null newPropertyStatus) do
-                            let _reason = Unsatisfiable
-                            liftIO (Exception.throw PropertyFailed{ _inputHistory = newInputHistory, _reason })
-
-                        Monad.when (HashSet.member historyKey _historySet && termination) do
-                            liftIO (Exception.throw (Nontermination newHistory))
-
-                        maybeSeen <- liftIO (HashTable.lookup hashtable seenKey)
-
-                        let member = case maybeSeen of
-                                Nothing -> False
-                                Just _  -> True
-
-                        Monad.when member empty
-
-                        liftIO (HashTable.insert hashtable seenKey ())
-
-                        put $! Timeline
-                            { _processStatus
-                            , _history = newHistory
-                            , _historySet = HashSet.insert historyKey _historySet
-                            , _propertyStatus = newPropertyStatus
-                            , _inputHistory = newInputHistory
-                            }
-
-                        loop hashtable rest
 
             handler :: IO a -> IO a
             handler
@@ -1126,15 +1151,7 @@ model Model
                 | otherwise = id
               where
                 display exception = do
-                    terminal <- ANSI.hSupportsANSI IO.stdout
-
-                    let putDoc =
-                            if terminal
-                            then Pretty.Terminal.putDoc
-                            else Pretty.Text.putDoc
-
-
-                    putDoc (prettyModelException exception <> "\n")
+                    putDoc (prettyModelException exception)
 
                     Exception.throwIO (Exit.ExitFailure 1)
 
@@ -1162,3 +1179,10 @@ data Seen label processStatus propertyStatus = Seen
     , _propertyStatus :: !propertyStatus
     } deriving stock (Eq, Generic)
       deriving anyclass (Hashable)
+
+data Statistics = Statistics
+    { _successfulBranches :: Natural
+    , _visitedStates      :: Natural
+    , _redundantStates    :: Natural
+    } deriving stock (Generic)
+      deriving anyclass (ToJSON)

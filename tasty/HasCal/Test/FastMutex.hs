@@ -32,9 +32,7 @@ makeLenses ''Global
 
 fastMutex :: Int -> IO ()
 fastMutex n = model defaultModel
-    { debug = True
-
-    , termination = False
+    { termination = False
 
     , startingGlobals = do
         let _x = 0
