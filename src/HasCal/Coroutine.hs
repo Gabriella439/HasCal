@@ -916,9 +916,7 @@ defaultModel = Model
     This `Timeline` state is isolated from other branches of execution
 -}
 data Timeline global local label status = Timeline
-    { _processStatus  :: !(Status global local)
-      -- ^ This stores the internal state of the `Process`
-    , _history        :: [ HistoryKey label (Status global local) ]
+    { _history        :: [ HistoryKey label (Status global local) ]
       -- ^ This is kept for error reporting so that if things go wrong we can
       --   report to the user what sequence of events led up to the problem
     , _historySet     :: !(HashSet (HistoryKey label (Status global local)))
@@ -929,11 +927,6 @@ data Timeline global local label status = Timeline
       -- ^ This stores the internal state of the temporal `Property`
     , _inputHistory :: [ Input global label ]
     }
-
--- A lens for accessing the process status of a `Timeline`
-processStatus
-    :: Lens' (Timeline global local label status) (Status global local)
-processStatus k (Timeline a b c d e) = fmap (\a' -> Timeline a' b c d e) (k a)
 
 {-| Run the model checker on a `Coroutine` by supplying a list of starting
     states
@@ -1011,9 +1004,9 @@ model Model
             hashtable <- HashTable.new @Cuckoo.HashTable
 
             let action = do
-                    startingGlobal <- lift (select startingGlobals)
+                    startingGlobal <- lift (lift (select startingGlobals))
 
-                    startingLocal <- lift (select startingLocals)
+                    startingLocal <- lift (lift (select startingLocals))
 
                     let startingProcessStatus = Status
                             { _global = startingGlobal
@@ -1041,9 +1034,10 @@ model Model
 
                     let historyKey = HistoryKey startingLabel startingProcessStatus
 
+                    lift (put $! startingProcessStatus)
+
                     put $! Timeline
-                        { _processStatus   = startingProcessStatus
-                        , _history         = [ historyKey ]
+                        { _history         = [ historyKey ]
                         , _historySet      = HashSet.singleton historyKey
                         , _propertyStatus
                         , _inputHistory
@@ -1052,7 +1046,7 @@ model Model
                     loop process
 
                 loop (Choice steps) = do
-                    step <- Lens.zoom processStatus steps
+                    step <- lift steps
 
                     case step of
                         Done () -> do
@@ -1064,7 +1058,9 @@ model Model
                                 liftIO (Exception.throw PropertyFailed{ _inputHistory, _reason })
 
                         Yield _label rest -> do
-                            Timeline{ _processStatus, _history, _historySet, _propertyStatus, _inputHistory } <- get
+                            _processStatus <- lift get
+
+                            Timeline{ _history, _historySet, _propertyStatus, _inputHistory } <- get
 
                             let Status{ _global } = _processStatus
 
@@ -1106,9 +1102,9 @@ model Model
 
                             liftIO (HashTable.insert hashtable seenKey ())
 
+                            lift (put $! _processStatus)
                             put $! Timeline
-                                { _processStatus
-                                , _history = newHistory
+                                { _history = newHistory
                                 , _historySet = HashSet.insert historyKey _historySet
                                 , _propertyStatus = newPropertyStatus
                                 , _inputHistory = newInputHistory
@@ -1118,7 +1114,10 @@ model Model
 
             _successfulBranches <- handler
                 (Logic.runLogicT
-                    (State.evalStateT action uninitializedTimeline)
+                    (State.evalStateT
+                        (State.evalStateT action uninitializedProcessStatus)
+                        uninitializedTimeline
+                    )
                     (\_ m -> do
                         !n <- m
                         return (n + 1)
@@ -1142,6 +1141,9 @@ model Model
             Monad.unless (termination ==> 0 < _successfulBranches) do
                 Exception.throw Deadlock
           where
+            uninitializedProcessStatus =
+                error "Internal error - Uninitialized process status"
+
             uninitializedTimeline =
                 error "Internal error - Uninitialized timeline"
 
