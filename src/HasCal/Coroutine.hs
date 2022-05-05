@@ -722,9 +722,9 @@ prettyValueList values =
         snd (diff before after) : diffs after afters
 
     diff :: Value -> Value -> (Any, Doc AnsiStyle)
-    diff (Array old ) (Array new) = do
-        let newList  = Foldable.toList new
+    diff (Array old) (Array new) = do
         let oldList = Foldable.toList old
+        let newList = Foldable.toList new
 
         let docs (o : ld) (n : ew) = do
                 d  <- diff o n
@@ -740,9 +740,9 @@ prettyValueList values =
                 then do
                     return ds
                 else do
-                    let render (First  _) = mempty
-                        render (Second a) = plus (prettyValue a)
-                        render (Both a _) = prettyValue a
+                    let render (First  a) = minus (prettyValue a)
+                        render (Second a) = plus  (prettyValue a)
+                        render (Both a _) =        prettyValue a
 
                     return (fmap render (Diff.getDiff oldList newList))
 
@@ -762,10 +762,8 @@ prettyValueList values =
         , not (Aeson.KeyMap.null both) = do
             Writer.tell (Any True)
 
-            let extras = Aeson.KeyMap.difference new old
-
-            let (extraLongs, extraShorts) =
-                    unzip (fmap extra (Aeson.KeyMap.toList extras))
+            let extraOlds = Aeson.KeyMap.difference old new
+            let extraNews = Aeson.KeyMap.difference new old
 
             let combine
                     :: Key
@@ -787,16 +785,21 @@ prettyValueList values =
                             <>  doc
 
                     return (long, short)
-                        
-                        
+
             let boths :: KeyMap (Any, (Doc AnsiStyle, Doc AnsiStyle))
                 boths = Aeson.KeyMap.intersectionWithKey combine old new
 
             (bothLongs, bothShorts) <- do
                 fmap unzip (Monad.sequence (Aeson.KeyMap.elems boths))
 
-            let longs  = extraLongs  <> bothLongs
-            let shorts = extraShorts <> bothShorts
+            let (extraNewLongs, extraNewShorts) =
+                    unzip (fmap (extra plus) (Aeson.KeyMap.toList extraNews))
+
+            let (extraOldLongs, extraOldShorts) =
+                    unzip (fmap (extra minus) (Aeson.KeyMap.toList extraOlds))
+
+            let longs  = extraOldLongs <> extraNewLongs  <> bothLongs
+            let shorts = extraOldShorts <> extraNewShorts <> bothShorts
 
             let long = Pretty.align (lined longs)
 
@@ -808,15 +811,15 @@ prettyValueList values =
 
             return (Pretty.group (Pretty.flatAlt long short))
       where
-        extra (key, value) =
-            ( plus
+        extra sign (key, value) =
+            ( sign
                 (   prettyKey (Aeson.Key.toText key)
                 <>  ":"
                 <>  Pretty.hardline
                 <>  "  "
                 <>  prettyValue value
                 )
-            , plus
+            , sign
                 (   prettyKey (Aeson.Key.toText key)
                 <>  ": "
                 <>  prettyValue value
@@ -829,6 +832,7 @@ prettyValueList values =
         | otherwise = do
             return (plus (prettyValue new))
     
+    minus = Pretty.annotate (Pretty.Terminal.color Red  )
     plus  = Pretty.annotate (Pretty.Terminal.color Green)
 
 lined :: Foldable list => list (Doc ann) -> Doc ann
