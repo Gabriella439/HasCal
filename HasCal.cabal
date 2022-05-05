@@ -38,6 +38,7 @@ library
                     , HasCal.Coroutine
                     , HasCal.Expression
                     , HasCal.Property
+    ghc-options:      -Wall -O2
 
 test-suite tasty
     import:           common
