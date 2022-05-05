@@ -77,7 +77,7 @@ data Item = Ore | Sheep | Brick
         , Universe
         )
 
-data Vendor = Alice | Bob
+data Vendor = Alice
     deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 data Offer = Offer { _buy :: Int, _sell :: Int }
