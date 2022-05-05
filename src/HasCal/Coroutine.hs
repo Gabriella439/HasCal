@@ -371,6 +371,7 @@ instance (ToJSON a, ToJSON b) => ToJSON (Pair a b) where
 -}
 yield :: label -> Process global local label ()
 yield _label = Choice (pure (Yield _label mempty))
+{-# INLINABLE yield #-}
 
 {-| A `Process` which does nothing, like the @skip@ statement in PlusCal
 
@@ -447,6 +448,7 @@ either
     -- ^ Subroutines to non-deterministically select from
     -> Process global local label result
 either = Foldable.asum
+{-# INLINABLE either #-}
 
 {-| Non-deterministically select from one of multiple possible values, like
     a @with@ statement in PlusCal
@@ -730,7 +732,7 @@ prettyValueList values =
                 d  <- diff o n
                 ds <- docs ld ew
                 return (d : ds)
-            docs new' _ = do
+            docs _ new' = do
                 return (fmap (plus . prettyValue) new')
 
         (ds, Any matching) <- Writer.listen (docs oldList newList)
