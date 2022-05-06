@@ -28,8 +28,10 @@ module HasCal.Expression
     , Universe(..)
     ) where
 
+import Control.Applicative (liftA2)
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
+import Data.Monoid (Ap(..))
 
 import qualified Control.Monad as Monad
 import qualified Data.Foldable as Foldable
@@ -142,6 +144,15 @@ instance Boolean Bool where
     true = True
 
     false = False
+
+instance (Applicative f, Boolean a) => Boolean (Ap f a) where
+    Ap l /\ Ap r = Ap (liftA2 (/\) l r)
+
+    Ap l \/ Ap r  = Ap (liftA2 (\/) l r)
+
+    true = Ap (pure true)
+
+    false = Ap (pure false)
 
 {-| Logical implication, like @=>@ in TLA+
 

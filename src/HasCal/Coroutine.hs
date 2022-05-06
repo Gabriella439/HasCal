@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor             #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE DerivingStrategies        #-}
+{-# LANGUAGE DerivingVia               #-}
 {-# LANGUAGE DuplicateRecordFields     #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts          #-}
@@ -67,7 +68,7 @@ import Data.Aeson.KeyMap (KeyMap)
 import Data.Algorithm.Diff (PolyDiff(..))
 import Data.HashSet (HashSet)
 import Data.Hashable (Hashable(..))
-import Data.Monoid (Any(..))
+import Data.Monoid (Any(..), Ap)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import HasCal.Expression (Boolean(..), Universe(..))
@@ -184,6 +185,8 @@ newtype Process global local label result
                 (Step global local label result)
         }
     deriving stock (Functor)
+    deriving (Boolean, Semigroup, Monoid)
+      via (Ap (Process global local label) result)
 
 instance Applicative (Process global local label) where
     pure result = Choice (pure (Done result))
@@ -205,21 +208,6 @@ instance Alternative (Process global local label) where
     empty = Choice empty
 
     Choice psL <|> Choice psR = Choice (psL <|> psR)
-
-instance Semigroup result => Semigroup (Process global local label result) where
-    (<>) = liftA2 (<>)
-
-instance Monoid result => Monoid (Process global local label result) where
-    mempty = pure mempty
-
-instance Boolean result => Boolean (Process global local label result) where
-    (/\) = liftA2 (/\)
-
-    (\/) = liftA2 (\/)
-
-    false = pure false
-
-    true = pure true
 
 instance MonadState (Status global local) (Process global local label) where
     get = Choice (fmap Done get)
@@ -301,6 +289,8 @@ data Coroutine global label =
             , startingLocals :: [local]
             , process        :: Process global local label ()
             }
+    deriving (Boolean, Semigroup, Monoid)
+      via (Ap (Coroutine global) label)
 
 instance Functor (Coroutine global) where
     fmap = Applicative.liftA
@@ -340,21 +330,6 @@ instance Applicative (Coroutine global) where
             onRight k (Status g (Pair l r)) = fmap adapt (k (Status g r))
               where
                 adapt (Status g' r') = Status g' (Pair l r')
-
-instance Semigroup label => Semigroup (Coroutine global label) where
-    (<>) = liftA2 (<>)
-
-instance Monoid label => Monoid (Coroutine global label) where
-    mempty = pure mempty
-
-instance Boolean label => Boolean (Coroutine global label) where
-    (/\) = liftA2 (/\)
-
-    (\/) = liftA2 (\/)
-
-    false = pure false
-
-    true = pure true
 
 data Unit = Unit
     deriving stock (Eq, Generic, Show)

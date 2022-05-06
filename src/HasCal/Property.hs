@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveAnyClass            #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE DerivingStrategies        #-}
+{-# LANGUAGE DerivingVia               #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TupleSections             #-}
@@ -38,6 +39,7 @@ import Control.Arrow (Arrow(..))
 import Control.Category (Category(..))
 import Control.Monad.Trans.State (State, StateT(..))
 import Data.Hashable (Hashable(..))
+import Data.Monoid (Ap(..))
 import Data.Profunctor (Profunctor(..))
 import GHC.Generics (Generic)
 import HasCal.Expression (Boolean(..), Universe(..), (==>))
@@ -102,6 +104,8 @@ import qualified Lens.Micro.Platform as Lens
 data Property input output =
         forall state . (Eq state, Hashable state, Universe state)
     =>  Property state (input -> State state output)
+    deriving (Boolean, Monoid, Semigroup) via (Ap (Property input) output)
+
 {- Under the hood, a `Property` is essentially the exact same thing as the
    `Scan` type from the @foldl@ package, but with two differences:
 
@@ -112,10 +116,10 @@ data Property input output =
      that we can invert the scan when converting to the `Check` type
 -}
 
-instance Functor (Property a) where
+instance Functor (Property input) where
     fmap f (Property s k) = Property s (fmap f . k)
 
-instance Applicative (Property a) where
+instance Applicative (Property input) where
     pure b = Property () (\_ -> pure b)
 
     Property sL kL <*> Property sR kR = Property s k
@@ -129,22 +133,7 @@ instance Applicative (Property a) where
                 (f, l') = State.runState (kL a) l
                 (x, r') = State.runState (kR a) r
 
-instance Semigroup b => Semigroup (Property a b) where
-    (<>) = liftA2 (<>)
-
-instance Monoid b => Monoid (Property a b) where
-    mempty = pure mempty
-
-instance Boolean b => Boolean (Property a b) where
-    (/\) = liftA2 (/\)
-
-    (\/) = liftA2 (\/)
-
-    false = pure false
-
-    true = pure true
-
-instance Num b => Num (Property a b) where
+instance Num output => Num (Property input output) where
     fromInteger = pure . fromInteger
 
     negate = fmap negate
@@ -155,14 +144,14 @@ instance Num b => Num (Property a b) where
     (*) = liftA2 (*)
     (-) = liftA2 (-)
 
-instance Fractional b => Fractional (Property a b) where
+instance Fractional output => Fractional (Property input output) where
     fromRational = pure . fromRational
 
     recip = fmap recip
 
     (/) = liftA2 (/)
 
-instance Floating b => Floating (Property a b) where
+instance Floating output => Floating (Property input output) where
     pi = pure pi
 
     exp   = fmap exp
@@ -308,7 +297,8 @@ instance Universe a => Universe (Prime a) where
     [False,True,True,True]
 -}
 following
-    :: (Eq a, Hashable a, Universe a) => (a -> a -> Bool) -> Property a Bool
+    :: (Eq input, Hashable input, Universe input)
+    => (input -> input -> Bool) -> Property input Bool
 following (?) = arr adapt . prime
   where
     adapt  Nothing      = True
@@ -385,11 +375,12 @@ data Check input output =
             (input -> StateT state [] output)
             -- ^ Given an @input@ and an old @state@, return a list of possible
             --   new @(output, state)@ pairs
+    deriving (Boolean, Monoid, Semigroup) via (Ap (Check input) output)
 
-instance Functor (Check a) where
+instance Functor (Check input) where
     fmap f (Check s k) = Check s (fmap f . k)
 
-instance Applicative (Check a) where
+instance Applicative (Check input) where
     pure b = Check () (\_ -> pure b)
 
     Check sL kL <*> Check sR kR = Check s k
@@ -403,13 +394,7 @@ instance Applicative (Check a) where
                 (x, r') <- State.runStateT (kR a) r
                 return (f x, Pair l' r')
 
-instance Semigroup b => Semigroup (Check a b) where
-    (<>) = liftA2 (<>)
-
-instance Monoid b => Monoid (Check a b) where
-    mempty = pure mempty
-
-instance Num b => Num (Check a b) where
+instance Num output => Num (Check input output) where
     fromInteger = pure . fromInteger
 
     negate = fmap negate
@@ -420,14 +405,14 @@ instance Num b => Num (Check a b) where
     (*) = liftA2 (*)
     (-) = liftA2 (-)
 
-instance Fractional b => Fractional (Check a b) where
+instance Fractional output => Fractional (Check input output) where
     fromRational = pure . fromRational
 
     recip = fmap recip
 
     (/) = liftA2 (/)
 
-instance Floating b => Floating (Check a b) where
+instance Floating output => Floating (Check input output) where
     pi = pure pi
 
     exp   = fmap exp
