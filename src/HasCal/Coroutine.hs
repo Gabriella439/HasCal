@@ -463,8 +463,8 @@ either = Foldable.asum
 {-| Non-deterministically select from one of multiple possible values, like
     a @with@ statement in PlusCal
 
-    `with` is the same thing as using `either` to select from a list of `pure`
-    subroutines:
+    `with` is (essentially) the same thing as using `either` to select from a
+    list of `pure` subroutines:
 
 @
 `with` results = `either` (`fmap` `pure` results)
@@ -491,10 +491,10 @@ either = Foldable.asum
 @
 
 -}
-with
-    :: (Foldable list, Functor list)
-    => list result -> Process global local label result
-with results = either (fmap pure results)
+with :: Foldable list => list result -> Process global local label result
+with = foldr cons empty
+  where
+    cons result rest = pure result <|> rest
 
 {-| Run a loop so long as the loop condition does not return `True`, like a
     @while@ statement in PlusCal
