@@ -150,7 +150,7 @@ arbitrage maxPrice maxActions = do
                             yield Buy
                             _backpack <- use (global.backpack)
                             v <- with _V
-                            i <- with (Set.difference (Set.fromList _I) _backpack)
+                            i <- with (Set.toList (Set.difference (Set.fromList _I) _backpack))
                             Just loss <- preuse (global.market.ix (v, i).sell)
                             global.profit -= loss
                             global.backpack %= Set.insert i
@@ -158,7 +158,7 @@ arbitrage maxPrice maxActions = do
                             yield Sell
                             _backpack <- use (global.backpack)
                             v <- with _V
-                            i <- with _backpack
+                            i <- with (Set.toList _backpack)
                             Just gain <- preuse (global.market.ix (v, i).buy)
                             global.profit += gain
                             global.backpack %= Set.delete i
@@ -166,7 +166,7 @@ arbitrage maxPrice maxActions = do
                             yield Trade
                             _backpack <- use (global.backpack)
                             _trades <- use (global.trades)
-                            itemsLost <- with (Set.intersection (Set.fromList (subset (Set.toList _backpack))) (Set.fromList (domain _trades)))
+                            itemsLost <- with (Set.toList (Set.intersection (Set.fromList (subset (Set.toList _backpack))) (Set.fromList (domain _trades))))
                             Just itemGained <- preuse (global.trades.ix itemsLost)
                             global.backpack %= Set.insert itemGained . (`Set.difference` (Set.fromList itemsLost))
                         ]
