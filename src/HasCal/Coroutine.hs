@@ -901,7 +901,10 @@ prettyModelException Failure{ _message } = "Failure: " <> pretty _message
 data Model global label = Model
     { termination :: Bool
       -- ^ When `True`, throw a `Nontermination` exception if any cycles are
-      -- detected or a `Deadlock` exception if no execution branch terminates
+      -- detected
+    , deadlock :: Bool
+      -- ^ When `True`, throw a `Deadlock` exception if if the `Coroutine`
+      --   cannot make progress
     , debug :: Bool
       -- ^ Set this to `True` if you want to pretty-print the `ModelException`
       --   and instead throw @`Exit.ExitFailure` 1@ in its place
@@ -926,6 +929,7 @@ data Model global label = Model
 defaultModel :: Model () ()
 defaultModel = Model
     { termination = True
+    , deadlock = True
     , debug = False
     , coroutine = mempty
     , property = pure True
@@ -1009,6 +1013,7 @@ model
 model Model
     { debug
     , termination
+    , deadlock
     , property
     , startingGlobals
     , coroutine = Coroutine{ startingLabel, startingLocals, process }
@@ -1070,8 +1075,8 @@ model Model
 
                 loop (Choice steps) = do
                     let wrap
-                            | termination = State.mapStateT progressive
-                            | otherwise   = id
+                            | deadlock  = State.mapStateT progressive
+                            | otherwise = id
 
                     step <- lift (wrap steps)
 
