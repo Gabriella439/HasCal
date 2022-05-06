@@ -127,16 +127,13 @@ progressive (LogicT k) = LogicT k'
   where
     k' cons nil = do
         (nonEmpty, s) <- k cons' nil'
-        Monad.unless nonEmpty (Exception.throw Deadlock)
-        return s
+        if nonEmpty
+            then return s
+            else Exception.throw Deadlock
       where
-        cons' a m = do
-            s <- cons a (fmap snd m)
-            return (True, s)
+        cons' a m = fmap ((,) True) (cons a (fmap snd m))
 
-        nil' = do
-            s <- nil
-            return (False, s)
+        nil' = fmap ((,) False) nil
 
 {-| A `Process` represents a sequence of @PlusCal@ statements.  You can think of
     a `Process` as a non-deterministic finite automaton:
