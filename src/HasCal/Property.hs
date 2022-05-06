@@ -222,6 +222,7 @@ instance (Universe a, Universe b) => Universe (Pair a b) where
 -}
 eventually :: Property Bool Bool
 eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
+{-# INLINABLE eventually #-}
 
 {-| This property outputs `False` if the current input or any future input is
     `False`, and outputs `True` otherwise
@@ -233,6 +234,7 @@ eventually = Property False (\l -> State.state (\r -> let b = l || r in (b, b)))
 -}
 always :: Property Bool Bool
 always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
+{-# INLINABLE always #-}
 
 {-| @f `~>` g@ returns `True` if every `True` output of @f@ is eventually
     followed by a `True` output from @g@
@@ -248,6 +250,7 @@ always = Property True (\l -> State.state (\r -> let b = l && r in (b, b)))
 -}
 (~>) :: Property a Bool -> Property a Bool -> Property a Bool
 f ~> g = always . (liftA2 (==>) f (eventually . g))
+{-# INLINABLE (~>) #-}
 
 {-| Turn a getter into the equivalent `Property`
 
@@ -264,6 +267,7 @@ f ~> g = always . (liftA2 (==>) f (eventually . g))
 -}
 viewing :: Getting b a b -> Property a b
 viewing getter = arr (Lens.view getter)
+{-# INLINABLE viewing #-}
 
 {-| This property outputs each element with the following element (or `Nothing`
     if there is no following element)
@@ -282,6 +286,7 @@ prime = Property Zero step
         f  Zero      = (Nothing, One a0)
         f (One a1  ) = (Just (a0, a1), Two a0 a1)
         f (Two a1 _) = (Just (a0, a1), Two a0 a1)
+{-# INLINABLE prime #-}
 
 data Prime a = Zero | One !a | Two !a !a
     deriving (Eq, Generic, Hashable)
@@ -303,6 +308,7 @@ following (?) = arr adapt . prime
   where
     adapt  Nothing      = True
     adapt (Just (x, y)) = x ? y
+{-# INLINABLE following #-}
 
 {-| Convert a `Property` into the equivalent list transformation
 
@@ -472,6 +478,7 @@ check (Property s k) = Check s k'
             (b, new) = State.runState (k a) old
 
     k' a = StateT (\new -> HashMap.findWithDefault [] new (relation a))
+{-# INLINABLE check #-}
 
 {-| This function checks that a list of @input@ and @output@ pairs is
     consistent with the given temporal `Property`

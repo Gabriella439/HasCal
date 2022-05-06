@@ -244,10 +244,12 @@ data Status global local = Status
 -- | A lens for accessing the global state of a `Process`
 global :: Lens' (Status global local) global
 global k (Status a b) = fmap (\a' -> Status a' b) (k a)
+{-# INLINABLE global #-}
 
 -- | A lens for accessing the local state of a `Process`
 local :: Lens' (Status global local) local
 local k (Status a b) = fmap (\b' -> Status a b') (k b)
+{-# INLINABLE local #-}
 
 {-| A `Coroutine` wraps a `Process` alongside a starting label and starting
     process-local state.  Including the starting state makes a `Coroutine` a
@@ -418,6 +420,7 @@ example = do
 -}
 skip :: Process global local label ()
 skip = mempty
+{-# INLINE skip #-}
 
 {-| Non-deterministically simulate multiple subroutines, like an @either@
     statement in PlusCal
@@ -458,7 +461,7 @@ either
     -- ^ Subroutines to non-deterministically select from
     -> Process global local label result
 either = Foldable.asum
-{-# INLINABLE either #-}
+{-# INLINE either #-}
 
 {-| Non-deterministically select from one of multiple possible values, like
     a @with@ statement in PlusCal
@@ -495,6 +498,7 @@ with :: Foldable list => list result -> Process global local label result
 with = foldr cons empty
   where
     cons result rest = pure result <|> rest
+{-# INLINABLE with #-}
 
 {-| Run a loop so long as the loop condition does not return `True`, like a
     @while@ statement in PlusCal
@@ -537,6 +541,7 @@ while condition body = do
 -}
 await :: Bool -> Process global local label ()
 await = Monad.guard
+{-# INLINE await #-}
 
 {-| Throw an exception if the condition does not evaluate to `True`, like an
     @assert@ statement in PlusCal
@@ -571,6 +576,7 @@ die _message = Exception.throw Failure{ _message }
 -}
 print :: Show a => a -> Process global local label ()
 print a = liftIO (Prelude.print a)
+{-# INLINABLE print #-}
 
 {-| The `ModelException` type represents all of the ways in which the model
     checker can fail
@@ -1198,10 +1204,12 @@ data Input global label = Input
 -- | A lens for accessing the global state of an `Input`
 state :: Lens' (Input global label) global
 state k (Input a b) = fmap (\a' -> Input a' b) (k a)
+{-# INLINABLE state #-}
 
 -- | A lens for accessing the label of an `Input`
 label :: Lens' (Input global label) label
 label k (Input a b) = fmap (\b' -> Input a b') (k b)
+{-# INLINABLE label #-}
 
 -- | Used internally to detect cycles
 data Seen label processStatus propertyStatus = Seen

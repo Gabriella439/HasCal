@@ -69,6 +69,7 @@ import qualified Data.List as List
 -}
 forall_ :: Foldable list => list a -> (a -> Bool) -> Bool
 forall_ = flip all
+{-# INLINABLE forall_ #-}
 
 {-| Verify that any element satisfies the given predicate, like @\\E@ in TLA+
 
@@ -95,7 +96,7 @@ forall_ = flip all
 -}
 exists_ :: Foldable list => list a -> (a -> Bool) -> Bool
 exists_ = flip any
-
+{-# INLINABLE exists_ #-}
 
 {-| A class for types that support boolean algebra
 
@@ -164,6 +165,7 @@ p `==>` q = `not` p `||` q
 -}
 (==>) :: Bool -> Bool -> Bool
 p ==> q = not p || q
+{-# INLINABLE (==>) #-}
 
 {-| Bidirectional logical implication, like @<=>@ in TLA+
 
@@ -175,6 +177,7 @@ p `<=>` q = (p `==>` q) `&&` (q `==>` p)
 -}
 (<=>) :: Bool -> Bool -> Bool
 p <=> q = (p ==> q) && (q ==> p)
+{-# INLINABLE (<=>) #-}
 
 infixr 1 ==>, <=>
 
@@ -266,6 +269,7 @@ keys |-> function = HashMap.fromList (Foldable.toList (fmap adapt keys))
 -}
 domain :: HashMap key value -> [key]
 domain = HashMap.keys
+{-# INLINE domain #-}
 
 {-| The range of a function set, like the @RANGE@ function that TLA+ projects
     commonly define
@@ -274,6 +278,7 @@ domain = HashMap.keys
 -}
 range :: HashMap key value -> [value]
 range = HashMap.elems
+{-# INLINE range #-}
 
 {-| The powerset of a list, like the @SUBSET@ function in TLA+
 
@@ -316,6 +321,7 @@ subset = Monad.filterM (\_ -> [False, True])
 -}
 choose :: Foldable list => list a -> (a -> Bool) -> Maybe a
 choose = flip List.find
+{-# INLINABLE choose #-}
 
 {-| A type whose values can be enumerated
 
