@@ -908,6 +908,9 @@ data Model global label = Model
     , debug :: Bool
       -- ^ Set this to `True` if you want to pretty-print the `ModelException`
       --   and instead throw @`Exit.ExitFailure` 1@ in its place
+    , statistics :: Bool
+      -- ^ Set this to `True` to display model-checking statistics at the end
+      --   of the run
     , coroutine :: Coroutine global label
       -- ^ `Coroutine` to check
     , property :: Property (Input global label) Bool
@@ -920,7 +923,9 @@ data Model global label = Model
 
     > defaultModel = Model
     >     { termination = True
+    >     , deadlock = True
     >     , debug = False
+    >     , statistics = False
     >     , coroutine = mempty
     >     , property = pure True
     >     , startingGlobals = pure ()
@@ -931,6 +936,7 @@ defaultModel = Model
     { termination = True
     , deadlock = True
     , debug = False
+    , statistics = False
     , coroutine = mempty
     , property = pure True
     , startingGlobals = pure ()
@@ -1012,6 +1018,7 @@ model
     -> IO ()
 model Model
     { debug
+    , statistics
     , termination
     , deadlock
     , property
@@ -1161,14 +1168,14 @@ model Model
 
             _redundantStates <- IORef.readIORef redundantStatesReference
 
-            let statistics = Statistics
+            let stats = Statistics
                     { _redundantStates
                     , _successfulBranches
                     , _visitedStates
                     }
 
-            Monad.when debug do
-                putDoc (prettyValue (toJSON statistics))
+            Monad.when statistics do
+                putDoc (prettyValue (toJSON stats))
           where
             uninitializedProcessStatus =
                 error "Internal error - Uninitialized process status"
