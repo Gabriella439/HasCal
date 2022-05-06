@@ -28,26 +28,15 @@ import qualified Control.Monad as Monad
 data Global = Global { _hr :: Int }
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-makeLenses ''Global
-
 data Label = Ini | Nxt
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-hcIni :: Process Global () Label ()
-hcIni = return ()
-   -- We don't need to do anything here, because `_hr` is already initialised in
-   -- `startingGlobals` below,
+makeLenses ''Global
 
-hcNxt :: Process Global () Label ()
-hcNxt = do
-    yield Nxt
-    h <- use (global.hr)
-    global.hr .= if h /= 12 then h + 1 else 1
-
-hc :: Process Global () Label ()
-hc = do
-    hcIni
-    Monad.forever hcNxt
+tick :: Int -> Int
+tick hour
+    | hour == 12 = 1
+    | otherwise  = hour + 1
 
 test_hourClock :: TestTree
 test_hourClock = HUnit.testCase "Hour clock" do
@@ -61,13 +50,10 @@ test_hourClock = HUnit.testCase "Hour clock" do
         , coroutine = Coroutine
             { startingLabel  = Ini
             , startingLocals = pure ()
-            , process        = hc
+            , process = Monad.forever do
+                yield Nxt
+                global.hr %= tick
             }
 
-        , property =
-              always
-            . (viewing (state . hr . to (`elem` [ 1 .. 12 ])) /\ liveness)
+        , property = always . viewing (state . hr . to (`elem` [ 1 .. 12 ]))
         }
-        where
-            liveness :: Property (Input Global Label) Bool
-            liveness = eventually . viewing (label . to (== Nxt))
