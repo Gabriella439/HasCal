@@ -3,7 +3,8 @@
 HasCal embeds PlusCal in Haskell as an ordinary Haskell package.  Everything is
 implemented entirely in Haskell, including the model checker.
 
-For example, this PlusCal code from the
+You can find lots of example code in the [test suite](./tasty/HasCal/Test),
+including an example which translates the following PlusCal code from the
 [Learn TLA+ book](https://learntla.com/introduction/example/):
 
 ```
@@ -30,7 +31,7 @@ end algorithm *)
 MoneyInvariant == alice_account + bob_account = account_total
 ```
 
-… corresponds to this Haskell code:
+… into this Haskell code:
 
 ```haskell
 {-# LANGUAGE BlockArguments  #-}
@@ -97,4 +98,18 @@ main = do
         }
 ```
 
-You can find more example code in the [test suite](./tasty/HasCal/Test)
+#### Notable omissions
+
+HasCal does not implement all of PlusCal's features.  Specifically, HasCal is
+missing the following features:
+
+* symmetry sets
+
+  The performance overhead of implementing symmetry sets negates the benefit
+
+* the `goto` keyword
+
+  `goto` can be simulated in Haskell by mutually recursive named procedures
+
+   See, for example,
+   [the "API" example from the test suite](tasty/HasCal/Test/API.hs)
