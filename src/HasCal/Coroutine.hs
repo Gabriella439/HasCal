@@ -70,7 +70,7 @@ import Data.Hashable (Hashable(..))
 import Data.Monoid (Any(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import HasCal.Expression (Universe(..), (==>))
+import HasCal.Expression (Universe(..))
 import HasCal.Property (Check(..), Property)
 import Lens.Micro.Platform (Lens')
 import Numeric.Natural (Natural)
@@ -115,8 +115,28 @@ import qualified Text.Show as Show
    >>> import HasCal
 -}
 
+-- | Convert a list to the equivalent `LogicT`
 select :: [a] -> LogicT m a
 select as = LogicT (\cons nil -> foldr cons nil as)
+
+{-| Assert that a `LogicT` makes progress by throwing a `Deadlock` exception if
+    the `LogicT` is empty
+-}
+progressive :: LogicT IO a -> LogicT IO a
+progressive (LogicT k) = LogicT k'
+  where
+    k' cons nil = do
+        (nonEmpty, s) <- k cons' nil'
+        Monad.unless nonEmpty (Exception.throw Deadlock)
+        return s
+      where
+        cons' a m = do
+            s <- cons a (fmap snd m)
+            return (True, s)
+
+        nil' = do
+            s <- nil
+            return (False, s)
 
 {-| A `Process` represents a sequence of @PlusCal@ statements.  You can think of
     a `Process` as a non-deterministic finite automaton:
@@ -1052,7 +1072,11 @@ model Model
                     loop process
 
                 loop (Choice steps) = do
-                    step <- lift steps
+                    let wrap
+                            | termination = State.mapStateT progressive
+                            | otherwise   = id
+
+                    step <- lift (wrap steps)
 
                     case step of
                         Done () -> do
@@ -1143,9 +1167,6 @@ model Model
 
             Monad.when debug do
                 putDoc (prettyValue (toJSON statistics))
-
-            Monad.unless (termination ==> 0 < _successfulBranches) do
-                Exception.throw Deadlock
           where
             uninitializedProcessStatus =
                 error "Internal error - Uninitialized process status"
