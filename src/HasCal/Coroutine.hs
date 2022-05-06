@@ -920,15 +920,17 @@ data Model global label = Model
 
 {-| Default model-checking options
 
-    > defaultModel = Model
-    >     { termination = `True`
-    >     , deadlock = `True`
-    >     , debug = `False`
-    >     , statistics = `False`
-    >     , coroutine = `mempty`
-    >     , property = `true`
-    >     , startingGlobals = pure ()
-    >     }
+@
+defaultModel = `Model`
+    { termination = `True`
+    , deadlock = `True`
+    , debug = `False`
+    , statistics = `False`
+    , coroutine = `mempty`
+    , property = `true`
+    , startingGlobals = `pure` ()
+    }
+@
 -}
 defaultModel :: Model () ()
 defaultModel = Model
