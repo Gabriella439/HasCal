@@ -4,8 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-{-| This example is from the "Procedures and Macros" section of the "Learn TLA+"
-    guide
+{-| This example is from the "Processes" section of the "Learn TLA+" guide
 
 > EXTENDS Integers, Sequences, TLC, FiniteSets
 > CONSTANTS NumPhilosophers, NULL
@@ -17,53 +16,29 @@
 > variables forks = [fork \in 1..NP |-> NULL]
 >
 > define
->   LeftFork(p) == p
->   RightFork(p) == IF p = NP THEN 1 ELSE p + 1
+> LeftFork(p) == p
+> RightFork(p) == IF p = NP THEN 1 ELSE p + 1
 >
->   HeldForks(p) ==
->     { x \in {LeftFork(p), RightFork(p)}: forks[x] = p}
+> HeldForks(p) ==
+>   { x \in {LeftFork(p), RightFork(p)}: forks[x] = p}
 >
->   AvailableForks(p) ==
->     { x \in {LeftFork(p), RightFork(p)}: forks[x] = NULL}
+> AvailableForks(p) ==
+>   { x \in {LeftFork(p), RightFork(p)}: forks[x] = NULL}
+>
 > end define;
->
-> macro set_fork(fork, val) begin
->     forks[fork] := val;
-> end macro;
->
-> macro take_a_fork() begin
->   with fork \in AvailableForks(self) do
->        set_fork(fork, self);
->   end with;
-> end macro;
->
-> macro drop_a_fork() begin
->   await AvailableForks(self) = {};
->   with fork \in HeldForks(self) do
->     set_fork(fork, NULL);
->   end with;
-> end macro;
->
-> procedure attempt_eat() begin
->  Eat:
->   if Cardinality(HeldForks(self)) = 2 then
->     hungry := FALSE;
->     forks[LeftFork(self)] := NULL ||
->     forks[RightFork(self)] := NULL;
->   end if;
->   return;
-> end procedure;
->
 > process philosopher \in 1..NP
 > variables hungry = TRUE;
 > begin P:
 >   while hungry do
->     either
->       take_a_fork();
->     or
->       drop_a_fork();
->     end either;
->     call attempt_eat();
+>     with fork \in AvailableForks(self) do
+>       forks[fork] := self;
+>     end with;
+>     Eat:
+>       if Cardinality(HeldForks(self)) = 2 then
+>         hungry := FALSE;
+>         forks[LeftFork(self)] := NULL ||
+>         forks[RightFork(self)] := NULL;
+>       end if;
 >   end while;
 > end process;
 > end algorithm; *)
