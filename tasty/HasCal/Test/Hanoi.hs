@@ -87,5 +87,5 @@ test_hanoi =
                                 empty
                     }
 
-                , property = pure True
+                , property = true
                 }

@@ -66,7 +66,7 @@ test_trade = HUnit.testCase "Trade" do
 
         , coroutine = traverse_ giveitem [ 1 .. 3 ]
 
-        , property = pure True
+        , property = true
         }
   where
     giveitem :: Int -> Coroutine Global ()

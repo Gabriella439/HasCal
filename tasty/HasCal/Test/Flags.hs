@@ -79,5 +79,5 @@ test_flags = HUnit.testCase "Flags" do
                 global.f .= bool
             }
 
-        , property = pure True
+        , property = true
         }

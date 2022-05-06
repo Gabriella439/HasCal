@@ -114,7 +114,7 @@ test_api = HUnit.testCase "API" do
             , startingLocals = pure ()
 
             , process = do
-                while (pure True) do
+                while true do
                     yield Reset
                     global.made_calls .= 0
             }
@@ -176,7 +176,7 @@ test_api = HUnit.testCase "API" do
             _get_put        <- get_put
             return Labels{..}
 
-        , property = pure True
+        , property = true
 
         , termination = False
         }

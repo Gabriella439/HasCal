@@ -123,7 +123,7 @@ diningPhilosophers numPhilosophers = do
 
         , coroutine = traverse coroutine [ 1 .. numPhilosophers ]
 
-        , property = pure True
+        , property = true
         }
 
 test_diningPhilosophers :: TestTree

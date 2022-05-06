@@ -54,7 +54,7 @@ euclidAlg n = do
                 assert (finalV == Prelude.gcd initialU initialV)
             }
 
-        , property = pure True
+        , property = true
         }
 
 gcd :: Int -> Int -> Maybe Int

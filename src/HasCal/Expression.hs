@@ -13,6 +13,7 @@ module HasCal.Expression
     ( -- * TLA+ expressions
       forall_
     , exists_
+    , Boolean(..)
     , (==>)
     , (<=>)
     , boolean
@@ -92,6 +93,55 @@ forall_ = flip all
 -}
 exists_ :: Foldable list => list a -> (a -> Bool) -> Bool
 exists_ = flip any
+
+
+{-| A class for types that support boolean algebra
+
+    Laws:
+
+@
+(x `/\` y) `/\` z = x `/\` (y `/\` z)
+
+x `/\` `true` = x
+
+`true` `/\` x = x
+
+(x `\/` y) `\/` z = x `\/` (y `\/` z)
+
+x `\/` `false` = x
+
+`false` `\/` x = x
+
+`false` `/\` x = `false`
+
+x `/\` `false` = `false`
+
+`true` `/\` x = `true`
+
+x `/\` `true` = `true`
+@
+-}
+class Boolean a where
+    -- | Generalizes `&&`
+    (/\) :: a -> a -> a
+
+    -- | Generalizes `||`
+    (\/) :: a -> a -> a
+
+    -- | Generalizes `True`
+    true :: a
+
+    -- | Generalizes `False`
+    false :: a
+
+instance Boolean Bool where
+    (/\) = (&&)
+
+    (\/) = (||)
+
+    true = True
+
+    false = False
 
 {-| Logical implication, like @=>@ in TLA+
 

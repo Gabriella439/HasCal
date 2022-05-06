@@ -70,7 +70,7 @@ import Data.Hashable (Hashable(..))
 import Data.Monoid (Any(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import HasCal.Expression (Universe(..))
+import HasCal.Expression (Boolean(..), Universe(..))
 import HasCal.Property (Check(..), Property)
 import Lens.Micro.Platform (Lens')
 import Numeric.Natural (Natural)
@@ -212,6 +212,15 @@ instance Semigroup result => Semigroup (Process global local label result) where
 instance Monoid result => Monoid (Process global local label result) where
     mempty = pure mempty
 
+instance Boolean result => Boolean (Process global local label result) where
+    (/\) = liftA2 (/\)
+
+    (\/) = liftA2 (\/)
+
+    false = pure false
+
+    true = pure true
+
 instance MonadState (Status global local) (Process global local label) where
     get = Choice (fmap Done get)
 
@@ -337,6 +346,15 @@ instance Semigroup label => Semigroup (Coroutine global label) where
 
 instance Monoid label => Monoid (Coroutine global label) where
     mempty = pure mempty
+
+instance Boolean label => Boolean (Coroutine global label) where
+    (/\) = liftA2 (/\)
+
+    (\/) = liftA2 (\/)
+
+    false = pure false
+
+    true = pure true
 
 data Unit = Unit
     deriving stock (Eq, Generic, Show)
@@ -922,12 +940,12 @@ data Model global label = Model
 {-| Default model-checking options
 
     > defaultModel = Model
-    >     { termination = True
-    >     , deadlock = True
-    >     , debug = False
-    >     , statistics = False
-    >     , coroutine = mempty
-    >     , property = pure True
+    >     { termination = `True`
+    >     , deadlock = `True`
+    >     , debug = `False`
+    >     , statistics = `False`
+    >     , coroutine = `mempty`
+    >     , property = `true`
     >     , startingGlobals = pure ()
     >     }
 -}
@@ -938,7 +956,7 @@ defaultModel = Model
     , debug = False
     , statistics = False
     , coroutine = mempty
-    , property = pure True
+    , property = true
     , startingGlobals = pure ()
     }
 
@@ -976,12 +994,12 @@ data Timeline global local label status = Timeline
 
 
     >>> -- Create a coroutine that never terminates
-    >>> endlessCoroutine = Coroutine{ startingLabel = False, startingLocals = pure (), process = while (pure True) (yield True) }
-    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True }
+    >>> endlessCoroutine = Coroutine{ startingLabel = False, startingLocals = pure (), process = while true (yield True) }
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = true }
     *** Exception: Nontermination {_history = [HistoryKey {_label = True, _status = Status {_global = (), _local = ()}},HistoryKey {_label = True, _status = Status {_global = (), _local = ()}},HistoryKey {_label = False, _status = Status {_global = (), _local = ()}}]}
 
     >>> -- Enable debugging output for clarity
-    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True, debug = True }
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = true, debug = True }
     Non-termination
     ...
     - { Label: False, Status: { Global: [ ], Local: [ ] } }
@@ -990,7 +1008,7 @@ data Timeline global local label status = Timeline
     *** Exception: ExitFailure 1
 
     >>> -- Disable the termination checker if desired
-    >>> model defaultModel{ coroutine = endlessCoroutine, property = pure True, debug = True, termination = False }
+    >>> model defaultModel{ coroutine = endlessCoroutine, property = true, debug = True, termination = False }
 
     >>> -- Check a non-trivial property that succeeds
     >>> exampleProperty = eventually . always . viewing label

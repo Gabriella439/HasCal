@@ -64,7 +64,9 @@ test_hourClock = HUnit.testCase "Hour clock" do
             , process        = hc
             }
 
-        , property = always . (viewing (state . hr . to (`elem` [ 1 .. 12 ])) /\ liveness)
+        , property =
+              always
+            . (viewing (state . hr . to (`elem` [ 1 .. 12 ])) /\ liveness)
         }
         where
             liveness :: Property (Input Global Label) Bool
