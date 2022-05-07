@@ -46,50 +46,60 @@ import Test.Tasty (TestTree)
 import qualified Test.Tasty.HUnit as HUnit
 import qualified Control.Monad as Monad
 
-data Global = Global { _chan :: Chan }
-    deriving (Eq, Generic, Hashable, Show, ToJSON)
-
-data Chan = Chan { _val :: Data , _rdy :: Bool , _ack :: Bool }
+data Chan = Chan { _val :: Data, _rdy :: Bool, _ack :: Bool }
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Label = Init | Send | Rcv deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Data = D1 | D2 deriving (Eq, Generic, Hashable, Show, ToJSON, Universe)
+data Data = D1 | D2 | D3 deriving (Eq, Generic, Hashable, Show, ToJSON, Universe)
 
-makeLenses ''Global
 makeLenses ''Chan
 
-test_asyncInterface :: TestTree
-test_asyncInterface = HUnit.testCase "Async interface" do
-    model defaultModel
-        { termination = False
+-- `send` and `rcv` are factored out into top-level utilities so that they can
+-- be reused by the "HasCal.Test.FIFO" example
 
-        , startingGlobals = do
+send :: Data -> Process Chan local label ()
+send message = do
+    Chan{..} <- use global
+    await (_rdy == _ack)
+    global.val .= message
+    global.rdy %= not
+
+rcv :: Process Chan local label ()
+rcv = do
+    Chan{..} <- use global
+    await (_rdy /= _ack)
+    global.ack %= not
+
+channelModel :: Model Chan Label
+channelModel = defaultModel
+    { termination = False
+
+    , startingGlobals = do
             _val <- universe
             _rdy <- universe
             let _ack = _rdy
-            let _chan = Chan{..}
-            return Global{..}
+            return Chan{..}
 
-        , coroutine = Coroutine
-            { startingLabel  = Init
-            , startingLocals = pure ()
-            , process        = do
-                let send = do
-                        Chan{..} <- use (global.chan)
-                        await (_rdy == _ack)
-                        yield Send
-                        global.chan.val <~ with universe
-                        global.chan.rdy %= not
+    , coroutine = Coroutine
+        { startingLabel = Init
 
-                let rcv = do
-                        Chan{..} <- use (global.chan)
-                        await (_rdy /= _ack)
-                        yield Rcv
-                        global.chan.ack %= not
+        , startingLocals = pure ()
 
-                Monad.forever (send <|> rcv)
-            }
-
-        , property = true
+        , process = Monad.forever
+            (   (do msg <- with universe
+                    send msg
+                    yield Send
+                )
+            <|> (do rcv
+                    yield Rcv
+                )
+            )
         }
+
+    , property = true
+    }
+
+test_asyncInterface :: TestTree
+test_asyncInterface = HUnit.testCase "Async interface" do
+    model channelModel
