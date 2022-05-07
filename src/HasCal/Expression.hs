@@ -108,13 +108,17 @@ exists_ = flip any
 x `/\` `true` = x
 
 `true` `/\` x = x
+@
 
+@
 (x `\/` y) `\/` z = x `\/` (y `\/` z)
 
 x `\/` `false` = x
 
 `false` `\/` x = x
+@
 
+@
 `false` `/\` x = `false`
 
 x `/\` `false` = `false`
@@ -123,57 +127,91 @@ x `/\` `false` = `false`
 
 x `/\` `true` = `true`
 @
+
+@
+(x `===` y) `===` z = x `===` (y `===` z)
+
+x `===` `true` = x
+
+`true` `===` x = x
+@
+
+@
+(x `=/=` y) `=/=` z = x `=/=` (y `=/=` z)
+
+x `=/=` `false` = x
+
+`false` `=/=` x = x
+@
 -}
 class Boolean a where
-    -- | Generalizes `&&`
-    (/\) :: a -> a -> a
-
-    -- | Generalizes `||`
-    (\/) :: a -> a -> a
-
     -- | Generalizes `True`
     true :: a
 
     -- | Generalizes `False`
     false :: a
 
+    -- | Generalizes `&&`
+    (/\) :: a -> a -> a
+
+    -- | Generalizes `||`
+    (\/) :: a -> a -> a
+
+    -- | Generalizes `==` on `Bool`s
+    (===) :: a -> a -> a
+
+    -- | Generalizes `/=` on `Bool`s
+    (=/=) :: a -> a -> a
+
 instance Boolean Bool where
-    (/\) = (&&)
-
-    (\/) = (||)
-
     true = True
 
     false = False
 
+    (/\) = (&&)
+
+    (\/) = (||)
+
+    (===) = (==)
+
+    (=/=) = (/=)
+
 instance Boolean b => Boolean (a -> b) where
-    (/\) = liftA2 (/\)
-
-    (\/) = liftA2 (\/)
-
     true = pure true
 
     false = pure false
 
+    (/\) = liftA2 (/\)
+
+    (\/) = liftA2 (\/)
+
+    (===) = liftA2 (===)
+
+    (=/=) = liftA2 (=/=)
+
 instance (Applicative f, Boolean a) => Boolean (Ap f a) where
+    true = Ap (pure true)
+
+    false = Ap (pure false)
+
     Ap l /\ Ap r = Ap (liftA2 (/\) l r)
 
     Ap l \/ Ap r  = Ap (liftA2 (\/) l r)
 
-    true = Ap (pure true)
+    Ap l === Ap r  = Ap (liftA2 (===) l r)
 
-    false = Ap (pure false)
+    Ap l =/= Ap r  = Ap (liftA2 (=/=) l r)
 
 {-| Logical implication, like @=>@ in TLA+
 
     @p `==>` q@ is the same as \"if @p@ then @q@\"
 
 @
-p `==>` q = `not` p `||` q
+p `==>` q = (p `===` `false`) `\/` q
 @
 -}
-(==>) :: Bool -> Bool -> Bool
-p ==> q = not p || q
+(==>) :: Boolean bool => bool -> bool -> bool
+p ==> q = (p === false) \/ q
 {-# INLINABLE (==>) #-}
 
 {-| Bidirectional logical implication, like @<=>@ in TLA+
@@ -184,8 +222,8 @@ p ==> q = not p || q
 p `<=>` q = (p `==>` q) `&&` (q `==>` p)
 @
 -}
-(<=>) :: Bool -> Bool -> Bool
-p <=> q = (p ==> q) && (q ==> p)
+(<=>) :: Boolean bool => bool -> bool -> bool
+p <=> q = (p ==> q) /\ (q ==> p)
 {-# INLINABLE (<=>) #-}
 
 infixr 1 ==>, <=>
