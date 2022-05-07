@@ -1,13 +1,16 @@
 {-| HourClock
     [example](https://github.com/tlaplus/Examples/blob/master/specifications/SpecifyingSystems/HourClock/HourClock.tla)
-    from figure 2.1 on page 20 in Lamport's *Specifying Systems* book:
+    from figure 2.1 on page 20 in Lamport's \"Specifying Systems\" book:
 
->        VARIABLE hr
->
->        HCini == hr \in (1 .. 12)
->        HCnxt == hr' = IF hr # 12 THEN hr + 1 ELSE 1
->        HC    == HCini /\ [][HCnxt]_hr
-
+    > ---------------------- MODULE HourClock ----------------------
+    > EXTENDS Naturals
+    > VARIABLE hr
+    > HCini  ==  hr \in (1 .. 12)
+    > HCnxt  ==  hr' = IF hr # 12 THEN hr + 1 ELSE 1
+    > HC  ==  HCini /\ [][HCnxt]_hr
+    > --------------------------------------------------------------
+    > THEOREM  HC => []HCini
+    > ==============================================================
 -}
 
 {-# LANGUAGE BlockArguments   #-}
