@@ -169,6 +169,11 @@ class Boolean a where
     -- | Generalizes `/=` on `Bool`s
     (=/=) :: a -> a -> a
 
+infixr 3 /\
+infixr 2 \/
+infixr 4 ===
+infixr 4 =/=
+
 instance Boolean Bool where
     true = True
 
