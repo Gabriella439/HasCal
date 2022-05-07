@@ -13,6 +13,7 @@
 {-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeApplications          #-}
 
 {-| This module provides the `Process` and `Coroutine` types and associated
@@ -27,6 +28,10 @@ module HasCal.Coroutine
     , Status(..)
     , global
     , local
+    , globally
+    , locally
+    , zoomProcess
+    , zoomCoroutine
 
     -- * PlusCal Statements
     -- $statements
@@ -49,6 +54,8 @@ module HasCal.Coroutine
     , Input(..)
     , state
     , label
+    , stately
+    , labelly
 
       -- * Error handling
     , ModelException(..)
@@ -73,7 +80,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import HasCal.Expression (Boolean(..), Universe(..))
 import HasCal.Property (Check(..), Property)
-import Lens.Micro.Platform (Lens')
+import Lens.Micro.Platform (Lens, Lens', zoom)
 import Numeric.Natural (Natural)
 import Prelude hiding (either, print)
 import Prettyprinter (Doc, Pretty(..))
@@ -250,6 +257,48 @@ global k (Status a b) = fmap (\a' -> Status a' b) (k a)
 local :: Lens' (Status global local) local
 local k (Status a b) = fmap (\b' -> Status a b') (k b)
 {-# INLINABLE local #-}
+
+{-| Lift a lens on global state to a lens on `Status`
+
+@
+`globally` :: Lens' outer inner -> Lens' (`Status` outer local) (`Status` inner local)
+@
+-}
+globally
+    :: Lens outer outer' inner inner'
+    -- ^ Lens to lift
+    -> Lens (Status outer local) (Status outer' local) (Status inner local) (Status inner' local)
+globally l k (Status a b) =
+    unFocusingGlobal (l (\a' -> FocusingGlobal (k (Status a' b))) a)
+
+data FocusingGlobal f local global =
+    FocusingGlobal { unFocusingGlobal :: f (Status global local) }
+
+instance Functor f => Functor (FocusingGlobal f local) where
+    fmap f (FocusingGlobal x) = FocusingGlobal (fmap adapt x)
+      where
+        adapt (Status a b) = Status (f a) b
+
+{-| Lift a lens on local state to a lens on `Status`
+
+@
+`locally` :: Lens' outer inner -> Lens' (`Status` global outer) (`Status` global inner)
+@
+-}
+locally
+    :: Lens outer outer' inner inner'
+    -- ^ Lens to lift
+    -> Lens (Status global outer) (Status global outer') (Status global inner) (Status global inner')
+locally l k (Status a b) =
+    unFocusingLocal (l (\b' -> FocusingLocal (k (Status a b'))) b)
+
+data FocusingLocal f global local =
+    FocusingLocal { unFocusingLocal :: f (Status global local) }
+
+instance Functor f => Functor (FocusingLocal f local) where
+    fmap f (FocusingLocal x) = FocusingLocal (fmap adapt x)
+      where
+        adapt (Status a b) = Status a (f b)
 
 {-| A `Coroutine` wraps a `Process` alongside a starting label and starting
     process-local state.  Including the starting state makes a `Coroutine` a
@@ -577,6 +626,29 @@ die _message = Exception.throw Failure{ _message }
 print :: Show a => a -> Process global local label ()
 print a = liftIO (Prelude.print a)
 {-# INLINABLE print #-}
+
+-- | Zoom in on a subset of a `Coroutine`'s global state using a lens
+zoomCoroutine
+    :: Lens' outer inner -> Coroutine inner label -> Coroutine outer label
+zoomCoroutine l Coroutine{ startingLabel, startingLocals, process } =
+    Coroutine
+        { startingLabel
+        , startingLocals
+        , process = zoomProcess l process
+        }
+
+-- | Zoom in on a subset of a `Process`'s global state using a lens
+zoomProcess
+    :: Lens' outer inner
+    -> Process inner local label result
+    -> Process outer local label result
+zoomProcess l = adaptProcess
+  where
+    adaptProcess (Choice steps) =
+        Choice (zoom (globally l) (fmap adaptStep steps))
+
+    adaptStep (Done result      ) = Done result
+    adaptStep (Yield _label rest) = Yield _label (adaptProcess rest)
 
 {-| The `ModelException` type represents all of the ways in which the model
     checker can fail
@@ -1204,14 +1276,56 @@ data Input global label = Input
       deriving anyclass (ToJSON)
 
 -- | A lens for accessing the global state of an `Input`
-state :: Lens' (Input global label) global
+state :: Lens (Input global label) (Input global' label) global global'
 state k (Input a b) = fmap (\a' -> Input a' b) (k a)
 {-# INLINABLE state #-}
 
 -- | A lens for accessing the label of an `Input`
-label :: Lens' (Input global label) label
+label :: Lens (Input global label) (Input global label') label label'
 label k (Input a b) = fmap (\b' -> Input a b') (k b)
 {-# INLINABLE label #-}
+
+{-| Lift a lens on states to a lens on `Input`s
+
+@
+`stately` :: Lens' outer inner -> Lens' (`Input` outer label) (`Input` inner label)
+@
+-}
+stately
+    :: Lens outer outer' inner inner'
+    -- ^ Lens to lift
+    -> Lens (Input outer label) (Input outer' label) (Input inner label) (Input inner' label)
+stately l k (Input a b) =
+    unFocusingState (l (\a' -> FocusingState (k (Input a' b))) a)
+
+data FocusingState f local global =
+    FocusingState { unFocusingState :: f (Input global local) }
+
+instance Functor f => Functor (FocusingState f local) where
+    fmap f (FocusingState x) = FocusingState (fmap adapt x)
+      where
+        adapt (Input a b) = Input (f a) b
+
+{-| Lift a lens on labels to a lens on `Input`s
+
+@
+`labelly` :: Lens' outer inner -> Lens' (`Input` state outer) (`Input` state inner)
+@
+-}
+labelly
+    :: Lens outer outer' inner inner'
+    -- ^ Lens to lift
+    -> Lens (Input state outer) (Input state outer') (Input state inner) (Input state inner')
+labelly l k (Input a b) =
+    unFocusingLabel (l (\b' -> FocusingLabel (k (Input a b'))) b)
+
+data FocusingLabel f global local =
+    FocusingLabel { unFocusingLabel :: f (Input global local) }
+
+instance Functor f => Functor (FocusingLabel f local) where
+    fmap f (FocusingLabel x) = FocusingLabel (fmap adapt x)
+      where
+        adapt (Input a b) = Input a (f b)
 
 -- | Used internally to detect cycles
 data Seen label processStatus propertyStatus = Seen
