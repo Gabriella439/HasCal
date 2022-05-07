@@ -146,6 +146,15 @@ instance Boolean Bool where
 
     false = False
 
+instance Boolean b => Boolean (a -> b) where
+    (/\) = liftA2 (/\)
+
+    (\/) = liftA2 (\/)
+
+    true = pure true
+
+    false = pure false
+
 instance (Applicative f, Boolean a) => Boolean (Ap f a) where
     Ap l /\ Ap r = Ap (liftA2 (/\) l r)
 
