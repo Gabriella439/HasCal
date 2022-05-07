@@ -1,5 +1,10 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE DefaultSignatures  #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE TypeOperators      #-}
 
 {-| This module contains utilities that correspond to TLA+ expressions
 
@@ -28,10 +33,11 @@ module HasCal.Expression
     , Universe(..)
     ) where
 
-import Control.Applicative (liftA2)
+import Control.Applicative (Alternative(..), liftA2)
 import Data.Hashable (Hashable)
 import Data.HashMap.Strict (HashMap)
 import Data.Monoid (Ap(..))
+import GHC.Generics
 
 import qualified Control.Monad as Monad
 import qualified Data.Foldable as Foldable
@@ -370,24 +376,48 @@ choose :: Foldable list => list a -> (a -> Bool) -> Maybe a
 choose = flip List.find
 {-# INLINABLE choose #-}
 
-{-| A type whose values can be enumerated
-
-    Note that `universe` should be the same thing as
-    @[ `minBound` .. `maxBound` ]@ for a type that implements `Bounded` and
-    `Enum`, but sometimes it's easier or more efficient to define instances of
-    this class directly
-
-    For most types, the easiest way to implement `Universe` is to
-    @derive (`Bounded`, `Enum`, `Universe`)@ if you enable the @DeriveAnyClass@
-    extension
--}
+-- | A type where all possible values can be enumerated as a list
+--
+-- You can derive `Universe` for any type that implements `Generic`:
+--
+-- @
+-- {-# LANGUAGE DerivingStrategies #-}
+-- {-# LANGUAGE DeriveAnyClass     #-}
+-- {-# LANGUAGE DeriveGeneric      #-}
+--
+-- data Example = …
+--     deriving stock (`Generic`)
+--     deriving anyclass (`Universe`)
+-- @
 class Universe a where
     universe :: [a]
-    default universe :: (Bounded a, Enum a) => [a]
-    universe = [ minBound .. maxBound ]
+    default universe :: (Generic a, GenericUniverse (Rep a)) => [a]
+    universe = fmap to genericUniverse
 
-instance Universe () where
-    universe = [()]
+deriving anyclass instance Universe ()
 
-instance Universe Bool where
-    universe = [ False, True ]
+deriving anyclass instance Universe Bool
+
+class GenericUniverse f where
+    genericUniverse :: [f a]
+
+instance GenericUniverse f => GenericUniverse (M1 i t f) where
+    genericUniverse = fmap M1 genericUniverse
+
+instance GenericUniverse U1 where
+    genericUniverse = pure U1
+
+instance GenericUniverse V1 where
+    genericUniverse = empty
+
+instance (GenericUniverse l, GenericUniverse r) => GenericUniverse (l :*: r) where
+    genericUniverse = do
+        l <- genericUniverse
+        r <- genericUniverse
+        return (l :*: r)
+
+instance (GenericUniverse l, GenericUniverse r) => GenericUniverse (l :+: r) where
+    genericUniverse = fmap L1 genericUniverse <|> fmap R1 genericUniverse
+
+instance Universe c => GenericUniverse (K1 i c) where
+    genericUniverse = fmap K1 universe

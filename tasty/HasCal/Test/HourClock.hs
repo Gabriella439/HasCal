@@ -1,5 +1,4 @@
-{-| HourClock
-    [example](https://github.com/tlaplus/Examples/blob/master/specifications/SpecifyingSystems/HourClock/HourClock.tla)
+{-| This is based on the [HourClock example](https://github.com/tlaplus/Examples/blob/master/specifications/SpecifyingSystems/HourClock/HourClock.tla)
     from figure 2.1 on page 20 in Lamport's \"Specifying Systems\" book:
 
     > ---------------------- MODULE HourClock ----------------------
@@ -37,9 +36,7 @@ data Label = Ini | Nxt
 makeLenses ''Global
 
 tick :: Int -> Int
-tick hour
-    | hour == 12 = 1
-    | otherwise  = hour + 1
+tick hour = hour `mod` 12 + 1
 
 test_hourClock :: TestTree
 test_hourClock = HUnit.testCase "Hour clock" do

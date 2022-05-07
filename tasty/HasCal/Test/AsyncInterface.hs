@@ -1,24 +1,34 @@
-{-| This is the "Our second specification of an asynchronous interface" example
-    from page 30 in "Specifying Systems" by Lamport:
+{-| This is based on the [AsynchInterface example](https://github.com/tlaplus/Examples/blob/master/specifications/SpecifyingSystems/AsynchronousInterface/AsynchInterface.tla)
+    from figure 3.1 on page 27 in Lamport's \"Specifying Systems\" book:
 
->        CONSTANT Data
->        VARIABLE chan
->        TypeInvariant == chan \in [val : Data, rdy : {0,1}, ack : {0, 1}]
->
->        Init == /\ TypeInvariant
->                /\ chan.ack = chan.rdy
->
->        Send(d) == /\ chan.rdy = chan.ack
->                   /\ chan' = [chan EXCEPT !.val = d, !.rdy = 1 - @]
->
->        Rcv == /\ chan.rdy != chan.ack
->               /\ chan' = [chan EXCPT !.ack = 1 - @]
->
->        Next == (\E d \in Data : Send(d)) \/ Rcv
->
->        Spec == Init /\ [][Next]_chan
-
-    The following module is an attempt to translate it to HasCal.
+    > ------------------ MODULE AsynchInterface ---------------------
+    > EXTENDS Naturals
+    > CONSTANT  Data
+    > VARIABLES val, rdy, ack
+    >
+    > TypeInvariant == /\ val \in Data
+    >                  /\ rdy \in {0, 1}
+    >                  /\ ack \in {0, 1}
+    > ---------------------------------------------------------------
+    > Init == /\ val \in Data
+    >         /\ rdy \in {0, 1}
+    >         /\ ack = rdy
+    >
+    > Send == /\ rdy = ack
+    >         /\ val' \in Data
+    >         /\ rdy' = 1 - rdy
+    >         /\ UNCHANGED ack
+    >
+    > Rcv  == /\ rdy # ack
+    >         /\ ack' = 1 - ack
+    >         /\ UNCHANGED <<val, rdy>>
+    >
+    > Next == Send \/ Rcv
+    >
+    > Spec == Init /\ [][Next]_<<val, rdy, ack>>
+    > ---------------------------------------------------------------
+    > THEOREM Spec => []TypeInvariant
+    > ===============================================================
 -}
 
 {-# LANGUAGE BlockArguments   #-}
@@ -26,66 +36,28 @@
 {-# LANGUAGE DeriveGeneric    #-}
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TemplateHaskell  #-}
-{-# LANGUAGE TypeApplications #-}
 
 module HasCal.Test.AsyncInterface where
 
 import HasCal
-import Prelude hiding (either, init, (.))
+import Prelude hiding ((.))
 import Test.Tasty (TestTree)
 
 import qualified Test.Tasty.HUnit as HUnit
 import qualified Control.Monad as Monad
 
-data Global d = Global { _chan :: Chan d }
-  deriving (Eq, Generic, Hashable, Show, ToJSON)
-
-data Chan d = Chan
-  { _val :: d
-  , _rdy :: Bool
-  , _ack :: Bool
-  } deriving (Eq, Generic, Hashable, Show, ToJSON)
-
-data Label d = Init | Send d | Rcv
+data Global = Global { _chan :: Chan }
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
-data Data = D1 | D2
-  deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
+data Chan = Chan { _val :: Data , _rdy :: Bool , _ack :: Bool }
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
+
+data Label = Init | Send | Rcv deriving (Eq, Generic, Hashable, Show, ToJSON)
+
+data Data = D1 | D2 deriving (Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 makeLenses ''Global
 makeLenses ''Chan
-
-init :: Universe d => Process (Global d) () (Label d) ()
-init = do
-  global.chan.ack <~ use (global.chan.rdy)
-  Monad.forever next
-
-next :: Universe d => Process (Global d) () (Label d) ()
-next =
-    either
-      [ existsU send
-      , rcv
-      ]
-  where
-    existsU p = either (map p universe)
-
-send :: d -> Process (Global d) () (Label d) ()
-send d = do
-  _rdy <- use (global.chan.rdy)
-  _ack <- use (global.chan.ack)
-  await (_rdy == _ack)
-  yield (Send d)
-  global.chan.val .= d
-  global.chan.rdy %= not
-
-rcv :: Process (Global d) () (Label d) ()
-rcv = do
-  _rdy <- use (global.chan.rdy)
-  _ack <- use (global.chan.ack)
-  await (_rdy /= _ack)
-  yield Init -- TODO: This should be changed back to Rcv once checker can check
-             --       for liveness, see issue #10 and PR #11.
-  global.chan.ack %= not
 
 test_asyncInterface :: TestTree
 test_asyncInterface = HUnit.testCase "Async interface" do
@@ -93,20 +65,31 @@ test_asyncInterface = HUnit.testCase "Async interface" do
         { termination = False
 
         , startingGlobals = do
-            _val <- universe @Data
-            _rdy <- universe @Bool
-            _ack <- universe @Bool
+            _val <- universe
+            _rdy <- universe
+            let _ack = _rdy
             let _chan = Chan{..}
             return Global{..}
 
         , coroutine = Coroutine
             { startingLabel  = Init
             , startingLocals = pure ()
-            , process        = init
+            , process        = do
+                let send = do
+                        Chan{..} <- use (global.chan)
+                        await (_rdy == _ack)
+                        yield Send
+                        global.chan.val <~ with universe
+                        global.chan.rdy %= not
+
+                let rcv = do
+                        Chan{..} <- use (global.chan)
+                        await (_rdy /= _ack)
+                        yield Rcv
+                        global.chan.ack %= not
+
+                Monad.forever (send <|> rcv)
             }
 
-        , property = always . liveness
+        , property = true
         }
-    where
-        liveness :: Property (Input (Global Data) (Label Data)) Bool
-        liveness = viewing (state . chan . to (\g -> g^.rdy /= g^.ack)) ~> viewing (label . to (== Rcv))

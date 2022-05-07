@@ -67,21 +67,10 @@ import qualified Test.Tasty.HUnit as HUnit
 import qualified Test.Tasty.ExpectedFailure as Failure
 
 data Item = Ore | Sheep | Brick
-    deriving
-        ( Bounded
-        , Enum
-        , Eq
-        , Hashable
-        , Generic
-        , Ord
-        , Show
-        , ToJSON
-        , ToJSONKey
-        , Universe
-        )
+    deriving (Eq, Hashable, Generic, Ord, Show, ToJSON, ToJSONKey, Universe)
 
 data Vendor = Alice
-    deriving (Bounded, Enum, Eq, Generic, Hashable, Show, ToJSON, Universe)
+    deriving (Eq, Generic, Hashable, Show, ToJSON, Universe)
 
 data Offer = Offer { _buy :: !Int, _sell :: !Int }
     deriving (Eq, Generic, Hashable, Show, ToJSON)
