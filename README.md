@@ -98,18 +98,31 @@ main = do
         }
 ```
 
-#### Notable omissions
+#### Notable differences from PlusCal
 
-HasCal does not implement all of PlusCal's features.  Specifically, HasCal is
-missing the following features:
+HasCal differs from PlusCal in a few ways, which are enumerated here:
 
-* symmetry sets
+* HasCal processes are fair by default
+
+  You have to explicitly opt out of fairness by adding an explicit "do nothing"
+  branch to a process
+
+* Liveness properties can be vacuously satisfied by infinite cycles
+
+  If you disable the termination check then a process that goes into an infinite
+  loop may satisfy a liveness property by virtue of never failing the property.
+
+  For example, if have a liveness property that checks that a local variable is
+  eventually equals 1, that property can be satisfied by an infinite loop that
+  never sets the variable to 1.
+
+* HasCal does not support symmetry sets
 
   The performance overhead of implementing symmetry sets negates the benefit
 
-* the `goto` keyword
+* HasCal does not support the `goto` keyword
 
   `goto` can be simulated in Haskell by mutually recursive named procedures
 
    See, for example,
-   [the "API" example from the test suite](tasty/HasCal/Test/API.hs)
+   [the "FastMutex" example from the test suite](tasty/HasCal/Test/FastMutex.hs)
