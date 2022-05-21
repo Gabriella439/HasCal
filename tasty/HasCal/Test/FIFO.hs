@@ -105,13 +105,16 @@ import qualified Test.Tasty.HUnit as HUnit
 data Global = Global
     { _inChannel  :: Chan
     , _outChannel :: Chan
-    , _q          :: Seq Data
     } deriving (Eq, Generic, Hashable, Show, ToJSON)
+
+data Local = Local { _q :: Seq Data }
+    deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 data Label = Init | SSend | BufRcv | BufSend | RRcv
     deriving (Eq, Generic, Hashable, Show, ToJSON)
 
 makeLenses ''Global
+makeLenses ''Local
 
 -- There's technically no need to rename `channelModel` to `inChan` / `outChan`.
 -- since they're pure and instantiated identically.  We could have just used
@@ -132,17 +135,18 @@ test_asyncInterface = HUnit.testCase "FIFO" do
         , startingGlobals = do
             _inChannel  <- startingGlobals inChan
             _outChannel <- startingGlobals outChan
-            let _q = mempty
             return Global{..}
 
         , coroutine = Coroutine
             { startingLabel = Init
 
-            , startingLocals = pure ()
+            , startingLocals = do
+                let _q = mempty
+                return Local{..}
 
             , process = do
                 let ssend = do
-                        _q <- use (global.q)
+                        _q <- use (local.q)
                         await (Seq.length _q <= 3)
                         msg <- with universe
                         zoomProcess inChannel (Channel.send msg)
@@ -150,15 +154,15 @@ test_asyncInterface = HUnit.testCase "FIFO" do
                 let bufRcv = do
                         zoomProcess inChannel Channel.rcv
                         _val <- use (global.inChannel.val)
-                        global.q %= (|> _val)
+                        local.q %= (|> _val)
 
                 let bufSend = do
-                        _q <- use (global.q)
+                        _q <- use (local.q)
 
                         case Seq.viewl _q of
                             h :< t -> do
                                 zoomProcess outChannel (Channel.send h)
-                                global.q .= t
+                                local.q .= t
                             EmptyL ->
                                 empty
 
