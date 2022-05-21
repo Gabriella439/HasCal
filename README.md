@@ -3,6 +3,8 @@
 HasCal embeds PlusCal in Haskell as an ordinary Haskell package.  Everything is
 implemented entirely in Haskell, including the model checker.
 
+## Examples
+
 You can find lots of example code in the [test suite](./tasty/HasCal/Test),
 including an example which translates the following PlusCal code from the
 [Learn TLA+ book](https://learntla.com/introduction/example/):
@@ -98,7 +100,7 @@ main = do
         }
 ```
 
-#### Notable differences from PlusCal
+## Notable differences from PlusCal
 
 HasCal differs from PlusCal in a few ways, which are enumerated here:
 
